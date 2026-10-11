@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leitor de CCB</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #eceeed;
+    --panel: #ffffff;
+    --ink: #17302e;
+    --muted: #5b6e6b;
+    --line: #cfd8d6;
+    --teal: #0a6b66;
+    --teal-soft: #cfe5e2;
+    --warn: #8a4b00;
+    --danger: #a3261d;
+    --font: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0f1a19;
+      --panel: #162422;
+      --ink: #e4efed;
+      --muted: #94aaa6;
+      --line: #2b3f3c;
+      --teal: #4fc2b8;
+      --teal-soft: #1f3a37;
+      --warn: #f0b36b;
+      --danger: #ff8d82;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    color: var(--ink);
+    background: var(--paper);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 20px 64px; }
+  h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 6px; }
+  .lede { color: var(--muted); margin: 0 0 28px; max-width: 60ch; }
+
+  .drop {
+    display: block;
+    border: 2px dashed var(--line);
+    border-radius: 6px;
+    background: var(--panel);
+    padding: 34px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--teal); background: var(--teal-soft); }
+  .drop:focus-within { outline: 3px solid var(--teal); outline-offset: 2px; }
+  .drop strong { display: block; font-size: 1.05rem; }
+  .drop span { color: var(--muted); font-size: .92rem; }
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  #status { min-height: 1.5em; margin: 14px 0 0; font-size: .95rem; color: var(--muted); }
+  #status.error { color: var(--danger); }
+
+  #result { display: none; margin-top: 28px; }
+  #result.show { display: block; }
+
+  .entry {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 22px 22px 20px;
+    margin-bottom: 20px;
+  }
+  .entry h2 { font-size: .95rem; font-weight: 600; color: var(--muted); margin: 0 0 12px; }
+  .split-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .pct { font-size: 3rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--teal); }
+  .pct small { font-size: 1rem; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+  .bar {
+    display: flex; height: 22px; margin: 16px 0 8px;
+    border-radius: 3px; overflow: hidden; border: 1px solid var(--line);
+  }
+  .bar .in { background: var(--teal); transition: width .4s ease; }
+  .bar .fin {
+    flex: 1;
+    background: repeating-linear-gradient(135deg, var(--teal-soft) 0 6px, transparent 6px 12px);
+  }
+  .legend { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: .9rem; color: var(--muted); }
+  .legend b { color: var(--ink); font-weight: 600; }
+
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; }
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .field.wide { grid-column: 1 / -1; }
+  .field label { font-size: .85rem; font-weight: 600; }
+  .field input {
+    font: inherit; color: var(--ink); background: transparent;
+    border: 1px solid var(--line); border-radius: 4px; padding: 9px 10px; width: 100%;
+  }
+  .field input:focus-visible { outline: 3px solid var(--teal); outline-offset: 1px; border-color: var(--teal); }
+  .field input.missing { border-color: var(--warn); }
+  .hint { font-size: .82rem; color: var(--muted); min-height: 1.2em; }
+  .hint.warn { color: var(--warn); }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    border-radius: 4px; padding: 10px 16px; border: 1px solid var(--teal);
+    background: var(--teal); color: #fff;
+  }
+  @media (prefers-color-scheme: dark) { button { color: #08201e; } }
+  button.ghost { background: transparent; color: var(--teal); }
+  button:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+
+  .geo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; margin-bottom: 14px; }
+  .geo-result { display: none; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .geo-result.show { display: block; }
+  .dist { font-size: 2.4rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
+  .verdict { font-weight: 600; margin: 4px 0 12px; }
+  .verdict.near { color: var(--teal); }
+  .verdict.mid, .verdict.warn { color: var(--warn); }
+  .verdict.far { color: var(--danger); }
+  .kv { margin: 0 0 10px; font-size: .92rem; }
+  .kv dt { font-weight: 600; }
+  .kv dd { margin: 0 0 8px; color: var(--muted); overflow-wrap: anywhere; }
+  .geo-links { display: flex; gap: 16px; flex-wrap: wrap; font-size: .9rem; }
+  .geo-links a { color: var(--teal); }
+  .geo-note { font-size: .82rem; color: var(--muted); margin: 12px 0 0; max-width: 62ch; }
+  .choice { display: flex; gap: 18px; flex-wrap: wrap; margin: 0 0 14px; border: 0; padding: 0; }
+  .choice legend { font-size: .85rem; font-weight: 600; padding: 0; margin-bottom: 6px; }
+  .choice label { display: inline-flex; align-items: center; gap: 7px; font-size: .95rem; cursor: pointer; }
+  .choice input { accent-color: var(--teal); width: 1.05rem; height: 1.05rem; }
+  #lrStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
+  #lrStatus.error { color: var(--danger); }
+  #geoStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
+  #geoStatus.error { color: var(--danger); }
+  button:disabled { opacity: .55; cursor: progress; }
+
+  .privacy { margin-top: 28px; font-size: .85rem; color: var(--muted); max-width: 62ch; }
+
+  @media (max-width: 560px) {
+    .fields, .geo-grid { grid-template-columns: 1fr; }
+    .pct { font-size: 2.4rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar .in, .drop { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Leitor de CCB</h1>
+  <p class="lede">Envie o PDF completo da Cédula de Crédito Bancário. A página lê a Ficha Cadastral e a CCB e mostra os dados do cliente, o veículo e quanto foi dado de entrada.</p>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="application/pdf,.pdf">
+    <strong>Escolha o PDF ou arraste até aqui</strong>
+    <span>Só arquivos PDF com texto selecionável</span>
+  </label>
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <section id="result" aria-label="Dados extraídos">
+    <div class="entry">
+      <h2>Entrada sobre o valor do veículo</h2>
+      <div class="split-head">
+        <div class="pct" id="pctEntrada">–</div>
+        <div class="legend" style="margin:0"><span>Financiado: <b id="pctFin">–</b></span></div>
+      </div>
+      <div class="bar" role="img" aria-label="Divisão entre entrada e valor financiado" id="bar">
+        <div class="in" id="barIn" style="width:0%"></div>
+        <div class="fin"></div>
+      </div>
+      <div class="legend">
+        <span>Entrada: <b id="lgEntrada">–</b></span>
+        <span>Veículo: <b id="lgVeiculo">–</b></span>
+      </div>
+    </div>
+
+    <div class="entry">
+      <h2>Dados do cliente e do veículo</h2>
+      <div class="fields">
+        <div class="field wide">
+          <label for="fNome">Nome</label>
+          <input id="fNome" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fNasc">Data de nascimento</label>
+          <input id="fNasc" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fIdade">Idade</label>
+          <input id="fIdade" type="text" readonly>
+          <span class="hint" id="hIdade"></span>
+        </div>
+        <div class="field wide">
+          <label for="fEmail">E-mail</label>
+          <input id="fEmail" type="text" autocomplete="off">
+        </div>
+        <div class="field wide">
+          <label for="fEnd">Endereço do cadastro (rua e número)</label>
+          <input id="fEnd" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fBairro">Bairro</label>
+          <input id="fBairro" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fCidade">Cidade</label>
+          <input id="fCidade" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fCep">CEP da residência</label>
+          <input id="fCep" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fUf">UF</label>
+          <input id="fUf" type="text" maxlength="2" autocomplete="off">
+        </div>
+        <div class="field wide">
+          <label for="fVeiculo">Veículo (modelo)</label>
+          <input id="fVeiculo" type="text" autocomplete="off">
+          <span class="hint" id="hVeiculo"></span>
+        </div>
+        <div class="field">
+          <label for="fValorVeic">Valor do veículo (R$)</label>
+          <input id="fValorVeic" type="text" inputmode="decimal" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fEntrada">Valor da entrada (R$)</label>
+          <input id="fEntrada" type="text" inputmode="decimal" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fLoja">Loja (concessionária / revenda)</label>
+          <input id="fLoja" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fCnpj">CNPJ da loja</label>
+          <input id="fCnpj" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <h2>Local da assinatura digital</h2>
+      <p id="geoStatus" role="status" aria-live="polite"></p>
+      <div class="geo-grid">
+        <div class="field">
+          <label for="fLat">Latitude</label>
+          <input id="fLat" type="text" inputmode="decimal" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fLon">Longitude</label>
+          <input id="fLon" type="text" inputmode="decimal" autocomplete="off">
+        </div>
+      </div>
+      <fieldset class="choice">
+        <legend>Comparar o local da assinatura com</legend>
+        <label><input type="radio" name="alvo" value="loja" checked> Endereço da loja (pelo CNPJ)</label>
+        <label><input type="radio" name="alvo" value="residencia"> Endereço de residência do cliente</label>
+      </fieldset>
+      <div class="actions">
+        <button type="button" id="compare">Comparar</button>
+      </div>
+      <div class="geo-result" id="geoResult">
+        <div class="dist" id="gDist">–</div>
+        <div class="verdict" id="gVerdict"></div>
+        <dl class="kv">
+          <dt>Local da assinatura (aproximado)</dt>
+          <dd id="gSign">–</dd>
+          <dt id="gCadLabel">Endereço do cadastro</dt>
+          <dd id="gCad">–</dd>
+        </dl>
+        <div class="geo-links">
+          <a id="lnkSign" href="#" target="_blank" rel="noopener">Ver local da assinatura no mapa</a>
+          <a id="lnkCad" href="#" target="_blank" rel="noopener">Ver endereço do cadastro no mapa</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <h2>Distância entre a loja e a residência do cliente</h2>
+      <p id="lrStatus" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <button type="button" id="compareLR">Calcular distância loja x residência</button>
+      </div>
+      <div class="geo-result" id="lrResult">
+        <div class="dist" id="lrDist">–</div>
+        <div class="verdict" id="lrVerdict"></div>
+        <dl class="kv">
+          <dt id="lrLojaLabel">Endereço da loja</dt>
+          <dd id="lrLoja">–</dd>
+          <dt>Endereço de residência do cliente</dt>
+          <dd id="lrRes">–</dd>
+        </dl>
+        <div class="geo-links">
+          <a id="lnkLrLoja" href="#" target="_blank" rel="noopener">Ver a loja no mapa</a>
+          <a id="lnkLrRes" href="#" target="_blank" rel="noopener">Ver a residência no mapa</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="copy">Copiar resumo</button>
+      <button type="button" class="ghost" id="reset">Ler outro PDF</button>
+    </div>
+  </section>
+
+  <p class="privacy">O PDF é lido no seu navegador. Só o botão "Comparar" envia CEP, CNPJ, rua, cidade e coordenadas a ViaCEP, BrasilAPI e OpenStreetMap.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+(function () {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var MONEY = /(\d{1,3}(?:\.\d{3})*,\d{2})/;
+  var NAME_CHARS = "A-ZÀ-ÝÇ";
+
+  /* ---------- utilidades ---------- */
+  function toNum(s) {
+    if (s == null) return null;
+    var t = String(s).replace(/[^\d.,]/g, '');
+    if (!t) return null;
+    if (t.indexOf(',') === -1 && /^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    else t = t.replace(/\./g, '').replace(',', '.');
+    var n = parseFloat(t);
+    return isNaN(n) ? null : n;
+  }
+  function brl(n) {
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  function pctFmt(n) {
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '%';
+  }
+  function plain(n) {
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function parseDate(s) {
+    var m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!m) return null;
+    var d = new Date(+m[3], +m[2] - 1, +m[1]);
+    return d.getMonth() === +m[2] - 1 && d.getDate() === +m[1] ? d : null;
+  }
+  function ageOf(birth) {
+    var t = new Date();
+    var a = t.getFullYear() - birth.getFullYear();
+    var md = t.getMonth() - birth.getMonth();
+    if (md < 0 || (md === 0 && t.getDate() < birth.getDate())) a--;
+    return a;
+  }
+  function titleCase(s) {
+    return s.toLowerCase().replace(/(^|\s)(\S)/g, function (_, a, b) { return a + b.toUpperCase(); })
+      .replace(/\b(Da|De|Do|Das|Dos|E)\b/g, function (w) { return w.toLowerCase(); });
+  }
+
+  var lastPdf = null;
+
+  /* ---------- leitura do PDF ---------- */
+  async function readPdf(file) {
+    var buf = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    lastPdf = pdf;
+    var pages = [];
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var page = await pdf.getPage(i);
+      var content = await page.getTextContent();
+      var items = content.items
+        .filter(function (it) { return it.str && it.str.trim(); })
+        .map(function (it) { return { s: it.str.trim(), x: it.transform[4], y: it.transform[5] }; });
+      pages.push({ items: items, text: items.map(function (it) { return it.s; }).join(' ') });
+    }
+    return pages;
+  }
+
+  /* item logo abaixo de um rótulo, na mesma coluna.
+     Procura da parte de cima da página para baixo e só aceita o que começa
+     perto do início do rótulo (evita pegar a coluna vizinha). */
+  function itemBelow(page, labelRe, valRe, maxLen) {
+    if (!page) return null;
+    maxLen = maxLen || 24;
+    var labels = page.items
+      .filter(function (i) { return labelRe.test(i.s); })
+      .sort(function (a, b) { return b.y - a.y; });
+    for (var k = 0; k < labels.length; k++) {
+      var label = labels[k];
+      var best = null;
+      page.items.forEach(function (c) {
+        if (c === label || c.s.length > maxLen || !valRe.test(c.s)) return;
+        var gap = label.y - c.y;
+        if (gap <= 0 || gap > 30) return;
+        var dx = c.x - label.x;
+        if (dx < -8 || dx > 60) return;
+        var score = gap + Math.abs(dx - 12) * 0.5;
+        if (!best || score < best.score) best = { score: score, c: c };
+      });
+      if (best) return { item: best.c, m: best.c.s.match(valRe) };
+    }
+    return null;
+  }
+  function textBelow(page, labelRe, valRe, maxLen) {
+    var r = itemBelow(page, labelRe, valRe, maxLen);
+    return r ? r.m : null;
+  }
+  function valueBelow(page, labelRe) {
+    var m = textBelow(page, labelRe, MONEY);
+    return m ? toNum(m[1]) : null;
+  }
+  var CEP_RE = /(\d{5})\s*-\s*(\d{3})/;
+
+  /* valor na mesma linha do rótulo (orçamento) */
+  function valueSameRow(page, labelRe) {
+    if (!page) return null;
+    var label = page.items.find(function (i) { return labelRe.test(i.s); });
+    if (!label) return null;
+    var best = null;
+    page.items.forEach(function (c) {
+      if (c === label || c.s.length > 18 || !MONEY.test(c.s)) return;
+      if (Math.abs(c.y - label.y) > 5 || c.x <= label.x) return;
+      if (!best || c.x > best.x) best = c;
+    });
+    return best ? toNum(best.s.match(MONEY)[1]) : null;
+  }
+
+  function extract(pages) {
+    var all = pages.map(function (p) { return p.text; }).join(' ');
+    var find = function (re) { return pages.find(function (p) { return re.test(p.text); }); };
+
+    var ficha = pages.find(function (p) { return /FICHA CADASTRAL/i.test(p.text) && /DATA NASCIMENTO/i.test(p.text); });
+    var q1 = find(/QUADRO 1 - VE[ÍI]CULO FINANCIADO/i);
+    var q5 = find(/ESPECIFICA[ÇC][ÕO]ES GERAIS DO CR[ÉE]DITO/i);
+    var orc = find(/OR[ÇC]AMENTO DE OPERA[ÇC][ÃA]O DE CR[ÉE]DITO/i);
+    var fText = ficha ? ficha.text : all;
+
+    var out = { nome: '', nasc: '', cep: '', email: '', endereco: '', bairro: '', cidade: '', uf: '', loja: '', cnpjLoja: '', veiculo: '', marca: '', ano: '', valorVeic: null, entrada: null };
+
+    /* Ficha cadastral */
+    var m = fText.match(new RegExp('\\b\\d{11}\\s+([' + NAME_CHARS + "][" + NAME_CHARS + "' ]{4,}?)\\s+\\d{5,}"));
+    if (m) out.nome = m[1].trim();
+
+    m = fText.match(/\b(\d{2}\/\d{2}\/\d{4})\b/);
+    if (m) out.nasc = m[1];
+    else {
+      m = all.match(/Data de Nascimento\s+(\d{2}\/\d{2}\/\d{4})/i);
+      if (m) out.nasc = m[1];
+    }
+
+    /* CEP: primeiro o campo CEP do Emitente na CCB; depois o CEP da ficha.
+       Nunca procura "o primeiro CEP do texto": o cabeçalho da CCB e a ficha
+       trazem o CEP do banco antes do CEP do cliente. */
+    m = textBelow(q1, /^CEP$/, CEP_RE) || textBelow(ficha, /^CEP$/, CEP_RE);
+    if (!m) {
+      var src = (q1 ? q1.text + ' ' : '') + fText;
+      m = src.match(/\b[A-Z]{2}\s+(\d{5})\s*-\s*(\d{3})\s+\(?\d{2,3}\)?\s?\d{4,5}/);
+    }
+    if (m) out.cep = m[1] + '-' + m[2];
+
+    m = fText.match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i);
+    if (m) out.email = m[0].toLowerCase();
+
+    /* Endereço do cadastro (Emitente na CCB; fallback na ficha) */
+    var ad = itemBelow(q1, /^Endere[çc]o \(Rua/, /^(.+?),\s*(\d+)/, 80);
+    if (ad) {
+      out.endereco = ad.m[1].trim() + ', ' + ad.m[2];
+    } else if (ficha) {
+      var st = itemBelow(ficha, /^ENDERE[ÇC]O RESIDENCIAL/, /^\S.*$/, 80);
+      if (st) {
+        var num = ficha.items.find(function (i) {
+          return Math.abs(i.y - st.item.y) < 4 && i.x > st.item.x && /^\d+[A-Za-z]?$/.test(i.s);
+        });
+        out.endereco = st.m[0].trim() + (num ? ', ' + num.s : '');
+      }
+    }
+    var pg = q1 || ficha;
+    var t1 = textBelow(pg, /^(Bairro|BAIRRO)$/, /^[A-ZÀ-Ý][A-ZÀ-Ý' .]+$/, 40);
+    if (t1) out.bairro = t1[0].trim();
+    var t2 = textBelow(pg, /^(Cidade|CIDADE)$/, /^[A-ZÀ-Ý][A-ZÀ-Ý' .]+$/, 40);
+    if (t2) out.cidade = t2[0].trim();
+    var t3 = textBelow(pg, /^(Estado|UF)$/, /^[A-Z]{2}$/, 4);
+    if (t3) out.uf = t3[0];
+
+    /* Loja: CNPJ e nome na linha "Concessionária / Revenda / Lojista" do orçamento */
+    if (orc) {
+      var lab = orc.items.find(function (i) { return /^Concession[áa]ria/i.test(i.s); });
+      if (lab) {
+        var row = orc.items.filter(function (i) { return Math.abs(i.y - lab.y) < 5 && i.x > lab.x; });
+        var c = row.find(function (i) { return /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(i.s); });
+        var n = row.find(function (i) { return /^\d+\s*-\s*\S/.test(i.s); });
+        if (c) out.cnpjLoja = c.s;
+        if (n) out.loja = n.s.replace(/^\d+\s*-\s*/, '');
+      }
+      if (!out.cnpjLoja) {
+        var mc = orc.text.match(/LTDA\S*\s+(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/);
+        if (mc) out.cnpjLoja = mc[1];
+      }
+    }
+
+    /* Veículo (Quadro 1 da CCB; fallback no orçamento) */
+    if (q1) {
+      m = q1.text.match(/\(\d{2,3}\)\s?\d{7,9}\s+(\S+)\s+(.+?)\s+((?:19|20)\d{2})\s+((?:19|20)\d{2})\b/);
+      if (m) { out.marca = m[1]; out.veiculo = m[2].trim(); out.ano = m[3] + '/' + m[4]; }
+    }
+    if (!out.veiculo && orc) {
+      m = orc.text.match(/\(\d{2,3}\)\s?\d{7,9}\s+(\S+)\s+(.+?)\s+(?:BI-COMBUST|FLEX|GASOLINA|DIESEL|EL[ÉE]TRICO|ETANOL|H[ÍI]BRIDO)/i);
+      if (m) { out.marca = m[1]; out.veiculo = m[2].trim(); }
+    }
+
+    /* Valor do veículo e entrada (Quadro 5) */
+    out.valorVeic = valueBelow(q5, /Valor do Ve[íi]culo/);
+    out.entrada = valueBelow(q5, /Valor da Entrada/);
+
+    if ((out.valorVeic == null || out.entrada == null) && q5) {
+      var seq = q5.text.match(new RegExp(
+        MONEY.source + '\\s+' + MONEY.source + '\\s+' + MONEY.source + '\\s+' + MONEY.source + '\\s+' + MONEY.source));
+      if (seq) {
+        var v = [1, 2, 3, 4, 5].map(function (i) { return toNum(seq[i]); });
+        if (Math.abs(v[0] + v[1] - v[2] + v[3] - v[4]) < 0.05) {
+          if (out.valorVeic == null) out.valorVeic = v[0];
+          if (out.entrada == null) out.entrada = v[2];
+        }
+      }
+    }
+    if ((out.valorVeic == null || out.entrada == null) && orc) {
+      if (out.valorVeic == null) out.valorVeic = valueSameRow(orc, /Valor do ve[íi]culo à vista/i);
+      if (out.entrada == null) out.entrada = valueSameRow(orc, /^Valor da entrada/i);
+    }
+    return out;
+  }
+
+  /* ---------- tela ---------- */
+  var fields = {
+    nome: $('fNome'), nasc: $('fNasc'), idade: $('fIdade'), cep: $('fCep'),
+    email: $('fEmail'), veiculo: $('fVeiculo'), valorVeic: $('fValorVeic'), entrada: $('fEntrada'),
+    endereco: $('fEnd'), bairro: $('fBairro'), cidade: $('fCidade'), uf: $('fUf'),
+    lat: $('fLat'), lon: $('fLon'), loja: $('fLoja'), cnpj: $('fCnpj')
+  };
+
+  function setStatus(msg, isError) {
+    var s = $('status');
+    s.textContent = msg;
+    s.className = isError ? 'error' : '';
+  }
+
+  function recalc() {
+    /* idade */
+    var d = parseDate(fields.nasc.value);
+    if (d) {
+      fields.idade.value = ageOf(d) + ' anos';
+      $('hIdade').textContent = 'Calculada com a data de hoje';
+      $('hIdade').className = 'hint';
+    } else {
+      fields.idade.value = '';
+      $('hIdade').textContent = fields.nasc.value ? 'Use o formato dd/mm/aaaa' : '';
+      $('hIdade').className = 'hint warn';
+    }
+    /* entrada */
+    var vv = toNum(fields.valorVeic.value);
+    var en = toNum(fields.entrada.value);
+    if (vv && en != null && vv > 0) {
+      var p = (en / vv) * 100;
+      var shown = Math.max(0, Math.min(100, p));
+      $('pctEntrada').textContent = pctFmt(p);
+      $('pctFin').textContent = pctFmt(100 - p);
+      $('barIn').style.width = shown + '%';
+      $('lgEntrada').textContent = brl(en);
+      $('lgVeiculo').textContent = brl(vv);
+    } else {
+      $('pctEntrada').textContent = '–';
+      $('pctFin').textContent = '–';
+      $('barIn').style.width = '0%';
+      $('lgEntrada').textContent = en != null ? brl(en) : '–';
+      $('lgVeiculo').textContent = vv ? brl(vv) : '–';
+    }
+    markMissing();
+  }
+
+  function markMissing() {
+    ['nome', 'nasc', 'cep', 'email', 'endereco', 'veiculo', 'valorVeic', 'entrada'].forEach(function (k) {
+      fields[k].classList.toggle('missing', !fields[k].value.trim());
+    });
+  }
+
+  function fill(d) {
+    fields.nome.value = d.nome ? titleCase(d.nome) : '';
+    fields.nasc.value = d.nasc;
+    fields.cep.value = d.cep;
+    fields.email.value = d.email;
+    fields.endereco.value = d.endereco;
+    fields.bairro.value = d.bairro ? titleCase(d.bairro) : '';
+    fields.cidade.value = d.cidade ? titleCase(d.cidade) : '';
+    fields.uf.value = d.uf;
+    fields.loja.value = d.loja ? titleCase(d.loja) : '';
+    fields.cnpj.value = d.cnpjLoja;
+    fields.veiculo.value = d.veiculo;
+    fields.valorVeic.value = d.valorVeic != null ? plain(d.valorVeic) : '';
+    fields.entrada.value = d.entrada != null ? plain(d.entrada) : '';
+    var extra = [];
+    if (d.marca) extra.push(titleCase(d.marca));
+    if (d.ano) extra.push(d.ano);
+    $('hVeiculo').textContent = extra.length ? 'Marca e ano: ' + extra.join(', ') : '';
+    recalc();
+    var faltando = ['nome', 'nasc', 'cep', 'email', 'endereco', 'veiculo', 'valorVeic', 'entrada']
+      .filter(function (k) { return !fields[k].value.trim(); });
+    if (faltando.length) {
+      setStatus('Alguns campos não foram encontrados. Eles estão destacados para você preencher.', true);
+    } else {
+      setStatus('Leitura concluída. Confira os dados abaixo.');
+    }
+    $('result').classList.add('show');
+  }
+
+  async function handleFile(file) {
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      setStatus('Esse arquivo não é um PDF. Escolha o PDF da CCB.', true);
+      return;
+    }
+    setStatus('Lendo o PDF…');
+    $('result').classList.remove('show');
+    try {
+      var pages = await readPdf(file);
+      var totalText = pages.reduce(function (n, p) { return n + p.text.length; }, 0);
+      if (totalText < 50) {
+        setStatus('Este PDF não tem texto selecionável (parece ser uma imagem escaneada). Use o PDF original da CCB.', true);
+        return;
+      }
+      fill(extract(pages));
+      detectSignature(pages);
+    } catch (e) {
+      console.error(e);
+      setStatus('Não foi possível ler o PDF. Verifique se o arquivo não está protegido ou corrompido.', true);
+    }
+  }
+
+
+  /* ---------- local da assinatura ---------- */
+  var UF_NOMES = {
+    AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará',
+    DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão',
+    MT: 'Mato Grosso', MS: 'Mato Grosso do Sul', MG: 'Minas Gerais', PA: 'Pará',
+    PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí', RJ: 'Rio de Janeiro',
+    RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul', RO: 'Rondônia', RR: 'Roraima',
+    SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins'
+  };
+
+  function setGeoStatus(msg, isError) {
+    var g = $('geoStatus');
+    g.textContent = msg;
+    g.className = isError ? 'error' : '';
+  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function loadScript(src) {
+    return new Promise(function (res, rej) {
+      var el = document.createElement('script');
+      el.src = src; el.onload = res;
+      el.onerror = function () { rej(new Error('Falha ao carregar ' + src)); };
+      document.head.appendChild(el);
+    });
+  }
+  function numCoord(s) {
+    var n = parseFloat(String(s).replace(/[−–]/g, '-').replace(/\s/g, '').replace(',', '.'));
+    return isFinite(n) ? n : null;
+  }
+
+  function parseSignature(text) {
+    var m = text.match(/Lat\s*\/\s*Long\s*:?\s*([-−–]?\s*\d{1,2}[.,]\d{3,7})\s*[,;]\s*([-−–]?\s*\d{1,3}[.,]\d{3,7})/i);
+    if (!m) return null;
+    var lat = numCoord(m[1]), lon = numCoord(m[2]);
+    if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    var dt = text.match(/Data:\s*(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})/);
+    var dev = text.match(/Dispositivo:\s*([A-Za-z]+)/);
+    return { lat: lat, lon: lon, data: dt ? dt[1] + ' ' + dt[2] : '', disp: dev ? dev[1] : '' };
+  }
+
+  async function renderPageCanvas(pageNum, scale) {
+    var page = await lastPdf.getPage(pageNum);
+    var vp = page.getViewport({ scale: scale });
+    var cv = document.createElement('canvas');
+    cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    return cv;
+  }
+
+  async function detectSignature(pages) {
+    $('geoResult').classList.remove('show');
+    fields.lat.value = ''; fields.lon.value = '';
+    var found = parseSignature(pages.map(function (p) { return p.text; }).join(' '));
+    if (!found) {
+      /* Na maioria dos PDFs a página de assinaturas é uma imagem: lê por OCR */
+      var idx = -1;
+      for (var i = pages.length - 1; i >= 0; i--) {
+        if (/assinaturas digitais/i.test(pages[i].text)) { idx = i; break; }
+      }
+      if (idx < 0) idx = pages.length - 1;
+      try {
+        setGeoStatus('Lendo a página de assinaturas por OCR. Na primeira vez isso pode levar alguns segundos…');
+        var cv = await renderPageCanvas(idx + 1, 3.5);
+        if (!window.Tesseract) await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+        var res = await Tesseract.recognize(cv, 'eng');
+        found = parseSignature(res.data.text);
+      } catch (e) {
+        console.error(e);
+        setGeoStatus('Não foi possível ler a página de assinaturas automaticamente. Digite a latitude e a longitude.', true);
+        return;
+      }
+    }
+    if (!found) {
+      setGeoStatus('Não encontrei o campo Lat/Long no PDF. Digite a latitude e a longitude para comparar.', true);
+      return;
+    }
+    fields.lat.value = String(found.lat);
+    fields.lon.value = String(found.lon);
+    var extra = [];
+    if (found.data) extra.push('assinado em ' + found.data);
+    if (found.disp) extra.push('dispositivo: ' + found.disp);
+    setGeoStatus('Coordenadas lidas do PDF' + (extra.length ? ' (' + extra.join(', ') + ')' : '') + '. Confira antes de comparar.');
+  }
+
+  function haversineKm(a, b, c, d) {
+    var R = 6371, rad = Math.PI / 180;
+    var dLat = (c - a) * rad, dLon = (d - b) * rad;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(a * rad) * Math.cos(c * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function fmtDist(km) {
+    return km < 1 ? Math.round(km * 1000) + ' m'
+      : km.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km';
+  }
+  function norm(s) {
+    return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+
+  async function getJson(url) {
+    var r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+  async function cepLookup(cep) {
+    try {
+      var j = await getJson('https://viacep.com.br/ws/' + cep + '/json/');
+      return j && !j.erro ? j : null;
+    } catch (e) { return null; }
+  }
+  async function nominatimSearch(params) {
+    var u = new URL('https://nominatim.openstreetmap.org/search');
+    var all = Object.assign({ format: 'jsonv2', limit: 1, addressdetails: 1, countrycodes: 'br', 'accept-language': 'pt-BR' }, params);
+    Object.keys(all).forEach(function (k) { u.searchParams.set(k, all[k]); });
+    var a = await getJson(u.toString());
+    return a && a[0] ? a[0] : null;
+  }
+  async function nominatimReverse(lat, lon) {
+    var u = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=pt-BR&lat=' +
+      encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon);
+    return getJson(u);
+  }
+  function cityOf(addr) {
+    return addr ? (addr.city || addr.town || addr.village || addr.municipality || '') : '';
+  }
+  function describeAddr(r) {
+    var a = r && r.address;
+    if (!a) return r && r.display_name ? r.display_name : '';
+    var parts = [];
+    if (a.road) parts.push(a.road + (a.house_number ? ', ' + a.house_number : ''));
+    var bairro = a.suburb || a.neighbourhood || a.city_district || '';
+    if (bairro) parts.push(bairro);
+    var c = cityOf(a);
+    if (c) parts.push(c);
+    var uf = a['ISO3166-2-lvl4'] ? a['ISO3166-2-lvl4'].replace('BR-', '') : '';
+    var txt = parts.join(', ');
+    return uf ? txt + ' - ' + uf : txt || r.display_name || '';
+  }
+
+  /* CNPJ da loja -> endereço (BrasilAPI; reserva: CNPJ.ws) */
+  async function cnpjLookup(cnpj) {
+    var d = cnpj.replace(/\D/g, '');
+    if (d.length !== 14) return null;
+    var tipoRua = function (tipo, log) {
+      tipo = (tipo || '').trim(); log = (log || '').trim();
+      return tipo && norm(log).indexOf(norm(tipo)) !== 0 ? tipo + ' ' + log : log;
+    };
+    try {
+      var j = await getJson('https://brasilapi.com.br/api/cnpj/v1/' + d);
+      if (j && j.logradouro) {
+        return {
+          nome: j.nome_fantasia || j.razao_social || '', razao: j.razao_social || '',
+          rua: tipoRua(j.descricao_tipo_de_logradouro, j.logradouro), numero: String(j.numero || '').trim(),
+          bairro: j.bairro || '', cidade: j.municipio || '', uf: j.uf || '', cep: String(j.cep || '').replace(/\D/g, '')
+        };
+      }
+    } catch (e) { /* tenta a reserva */ }
+    try {
+      var k = await getJson('https://publica.cnpj.ws/cnpj/' + d);
+      var e2 = k && k.estabelecimento;
+      if (e2 && e2.logradouro) {
+        return {
+          nome: e2.nome_fantasia || (k.razao_social || ''), razao: k.razao_social || '',
+          rua: tipoRua(e2.tipo_logradouro, e2.logradouro), numero: String(e2.numero || '').trim(),
+          bairro: e2.bairro || '', cidade: (e2.cidade && e2.cidade.nome) || '',
+          uf: (e2.estado && e2.estado.sigla) || '', cep: String(e2.cep || '').replace(/\D/g, '')
+        };
+      }
+    } catch (e) { /* sem reserva */ }
+    return null;
+  }
+
+  /* Localiza um endereço no mapa, do mais preciso (número) ao menos (cidade) */
+  async function geocodeEndereco(a) {
+    var estado = UF_NOMES[a.uf] || a.uf;
+    var tentativas = [];
+    if (a.rua && a.numero && a.cidade) tentativas.push(['número', { street: a.numero + ' ' + a.rua, city: a.cidade, state: estado }]);
+    if (a.rua && a.cidade) tentativas.push(['rua', { street: a.rua, city: a.cidade, state: estado }]);
+    if (a.cep && a.cep.length === 8) tentativas.push(['CEP', { postalcode: a.cep.slice(0, 5) + '-' + a.cep.slice(5) }]);
+    if (a.cidade) tentativas.push(['cidade', { city: a.cidade, state: estado }]);
+    for (var i = 0; i < tentativas.length; i++) {
+      try {
+        var r = await nominatimSearch(tentativas[i][1]);
+        if (r) return { r: r, nivel: tentativas[i][0] };
+      } catch (e) { /* tenta o próximo nível */ }
+      await sleep(1100);
+    }
+    return null;
+  }
+
+  /* Endereço de residência: rua pelo CEP (ViaCEP) e número pelo cadastro */
+  async function enderecoResidencia() {
+    var cep = fields.cep.value.replace(/\D/g, '');
+    var via = cep.length === 8 ? await cepLookup(cep) : null;
+    var mNum = fields.endereco.value.match(/,\s*(\d+)/);
+    return {
+      rua: (via && via.logradouro) || fields.endereco.value.replace(/,\s*\d+.*$/, '').trim(),
+      numero: mNum ? mNum[1] : '',
+      cidade: (via && via.localidade) || fields.cidade.value.trim(),
+      uf: ((via && via.uf) || fields.uf.value).trim().toUpperCase(),
+      cep: cep, nomeLocal: ''
+    };
+  }
+
+  function alvoEscolhido() {
+    var r = document.querySelector('input[name="alvo"]:checked');
+    return r ? r.value : 'loja';
+  }
+
+  async function compare() {
+    var lat = numCoord(fields.lat.value), lon = numCoord(fields.lon.value);
+    if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      setGeoStatus('Informe latitude e longitude válidas (exemplo: -23.54750 e -46.63611).', true);
+      return;
+    }
+    var alvo = alvoEscolhido();
+    var btn = $('compare');
+    btn.disabled = true;
+    $('geoResult').classList.remove('show');
+    setGeoStatus('Consultando os endereços…');
+    try {
+      var end, rotuloAlvo, rotuloCurto;
+      if (alvo === 'loja') {
+        if (fields.cnpj.value.replace(/\D/g, '').length !== 14) {
+          setGeoStatus('Informe o CNPJ da loja com 14 dígitos.', true);
+          return;
+        }
+        var loja = await cnpjLookup(fields.cnpj.value);
+        if (!loja) {
+          setGeoStatus('Não encontrei o endereço desse CNPJ nas consultas públicas. Confira o CNPJ ou compare com a residência.', true);
+          return;
+        }
+        end = loja;
+        rotuloAlvo = 'Endereço da loja' + (loja.nome ? ' (' + titleCase(loja.nome) + ')' : '');
+        rotuloCurto = 'da loja';
+      } else {
+        end = await enderecoResidencia();
+        rotuloAlvo = 'Endereço de residência do cliente';
+        rotuloCurto = 'da residência';
+      }
+      var rev = await nominatimReverse(lat, lon);
+      await sleep(1100);
+      var cad = await geocodeEndereco(end);
+      if (!cad) {
+        setGeoStatus('Não consegui localizar esse endereço no mapa. Confira rua, número, cidade e CEP.', true);
+        return;
+      }
+      var clat = parseFloat(cad.r.lat), clon = parseFloat(cad.r.lon);
+      var km = haversineKm(lat, lon, clat, clon);
+
+      var cidadeAssin = cityOf(rev && rev.address);
+      var cidadeAlvo = end.cidade;
+      var cidadesDiferem = cidadeAssin && cidadeAlvo && norm(cidadeAssin) !== norm(cidadeAlvo);
+
+      var cls, txt;
+      if (km <= 2) { cls = 'near'; txt = 'Perto ' + rotuloCurto; }
+      else if (km <= 10) { cls = 'mid'; txt = 'Na região ' + rotuloCurto + ', a alguns quilômetros'; }
+      else { cls = 'far'; txt = 'Longe ' + rotuloCurto; }
+      if (cidadesDiferem) txt += '. Cidades diferentes: assinatura em ' + cidadeAssin + ', endereço em ' + cidadeAlvo;
+
+      $('gDist').textContent = fmtDist(km);
+      var v = $('gVerdict');
+      v.textContent = txt;
+      v.className = 'verdict ' + cls;
+      $('gSign').textContent = describeAddr(rev) || 'Endereço não encontrado para essas coordenadas';
+      $('gCadLabel').textContent = rotuloAlvo;
+      var nivelTxt = { 'número': 'localizado pelo número', 'rua': 'localizado só pela rua (número não encontrado no mapa)',
+        'CEP': 'localizado só pelo CEP', 'cidade': 'localizado só pela cidade' }[cad.nivel];
+      $('gCad').textContent = describeAddr(cad.r) + ' (' + nivelTxt + ')';
+      $('lnkSign').href = 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lon + '#map=16/' + lat + '/' + lon;
+      $('lnkCad').href = 'https://www.openstreetmap.org/?mlat=' + clat + '&mlon=' + clon + '#map=16/' + clat + '/' + clon;
+      $('lnkCad').textContent = alvo === 'loja' ? 'Ver a loja no mapa' : 'Ver a residência no mapa';
+      $('geoResult').classList.add('show');
+      var aviso = cad.nivel === 'cidade' || cad.nivel === 'CEP'
+        ? 'O endereço só foi localizado pelo ' + (cad.nivel === 'CEP' ? 'CEP' : 'centro da cidade') + ', então a distância tem margem de erro maior.'
+        : '';
+      setGeoStatus(aviso);
+    } catch (e) {
+      console.error(e);
+      setGeoStatus('Falha ao consultar os serviços de mapa. Verifique a conexão e tente de novo em instantes.', true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+
+  /* ---------- distância entre a loja e a residência ---------- */
+  function setLrStatus(msg, isError) {
+    var g = $('lrStatus');
+    g.textContent = msg;
+    g.className = isError ? 'error' : '';
+  }
+
+  async function compareLojaResidencia() {
+    var btn = $('compareLR');
+    if (fields.cnpj.value.replace(/\D/g, '').length !== 14) {
+      setLrStatus('Informe o CNPJ da loja com 14 dígitos.', true);
+      return;
+    }
+    btn.disabled = true;
+    $('lrResult').classList.remove('show');
+    setLrStatus('Consultando os endereços…');
+    try {
+      var loja = await cnpjLookup(fields.cnpj.value);
+      if (!loja) {
+        setLrStatus('Não encontrei o endereço desse CNPJ nas consultas públicas. Confira o CNPJ.', true);
+        return;
+      }
+      var res = await enderecoResidencia();
+      var gl = await geocodeEndereco(loja);
+      await sleep(1100);
+      var gr = await geocodeEndereco(res);
+      if (!gl || !gr) {
+        setLrStatus('Não consegui localizar ' + (!gl ? 'o endereço da loja' : 'o endereço da residência') + ' no mapa. Confira os dados.', true);
+        return;
+      }
+      var la = parseFloat(gl.r.lat), lo = parseFloat(gl.r.lon);
+      var ra = parseFloat(gr.r.lat), ro = parseFloat(gr.r.lon);
+      var km = haversineKm(la, lo, ra, ro);
+
+      var cls, txt;
+      if (km <= 5) { cls = 'near'; txt = 'Loja perto da residência do cliente'; }
+      else if (km <= 30) { cls = 'mid'; txt = 'Loja na mesma região da residência do cliente'; }
+      else { cls = 'far'; txt = 'Loja longe da residência do cliente'; }
+      if (loja.cidade && res.cidade && norm(loja.cidade) !== norm(res.cidade)) {
+        txt += '. Cidades diferentes: loja em ' + loja.cidade + ', cliente em ' + res.cidade;
+      }
+
+      var nivelTxt = { 'número': 'localizado pelo número', 'rua': 'localizado só pela rua (número não encontrado no mapa)',
+        'CEP': 'localizado só pelo CEP', 'cidade': 'localizado só pela cidade' };
+      $('lrDist').textContent = fmtDist(km);
+      var v = $('lrVerdict');
+      v.textContent = txt;
+      v.className = 'verdict ' + cls;
+      $('lrLojaLabel').textContent = 'Endereço da loja' + (loja.nome ? ' (' + titleCase(loja.nome) + ')' : '');
+      $('lrLoja').textContent = describeAddr(gl.r) + ' (' + nivelTxt[gl.nivel] + ')';
+      $('lrRes').textContent = describeAddr(gr.r) + ' (' + nivelTxt[gr.nivel] + ')';
+      $('lnkLrLoja').href = 'https://www.openstreetmap.org/?mlat=' + la + '&mlon=' + lo + '#map=16/' + la + '/' + lo;
+      $('lnkLrRes').href = 'https://www.openstreetmap.org/?mlat=' + ra + '&mlon=' + ro + '#map=16/' + ra + '/' + ro;
+      var fracos = [];
+      if (gl.nivel === 'CEP' || gl.nivel === 'cidade') fracos.push('a loja');
+      if (gr.nivel === 'CEP' || gr.nivel === 'cidade') fracos.push('a residência');
+      $('lrResult').classList.add('show');
+      setLrStatus(fracos.length ? 'Para ' + fracos.join(' e ') + ', o mapa só localizou o CEP ou o centro da cidade, então a distância tem margem de erro maior.' : '');
+    } catch (e) {
+      console.error(e);
+      setLrStatus('Falha ao consultar os serviços de mapa. Verifique a conexão e tente de novo em instantes.', true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ---------- eventos ---------- */
+  var drop = $('drop');
+  $('file').addEventListener('change', function (e) { handleFile(e.target.files[0]); });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function (e) {
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+
+  ['nasc', 'valorVeic', 'entrada'].forEach(function (k) {
+    fields[k].addEventListener('input', recalc);
+  });
+  ['nome', 'cep', 'email', 'veiculo'].forEach(function (k) {
+    fields[k].addEventListener('input', markMissing);
+  });
+
+  $('compare').addEventListener('click', compare);
+  $('compareLR').addEventListener('click', compareLojaResidencia);
+
+  $('copy').addEventListener('click', function () {
+    var vv = toNum(fields.valorVeic.value);
+    var en = toNum(fields.entrada.value);
+    var linhas = [
+      'Cliente: ' + fields.nome.value,
+      'Idade: ' + fields.idade.value,
+      'Endereço: ' + fields.endereco.value + (fields.bairro.value ? ', ' + fields.bairro.value : '') + (fields.cidade.value ? ', ' + fields.cidade.value : '') + '/' + fields.uf.value,
+      'CEP: ' + fields.cep.value,
+      'E-mail: ' + fields.email.value,
+      'Veículo: ' + fields.veiculo.value,
+      'Entrada: ' + ((vv && en != null) ? pctFmt(en / vv * 100) + ' (' + brl(en) + ' de ' + brl(vv) + ')' : '')
+    ];
+    if ($('lrResult').classList.contains('show')) {
+      linhas.push('Loja x residência: ' + $('lrDist').textContent + ' (' + $('lrVerdict').textContent + ')');
+    }
+    if ($('geoResult').classList.contains('show')) {
+      linhas.push('Assinatura: ' + $('gDist').textContent + ' (' + $('gVerdict').textContent + ')');
+    }
+    var txt = linhas.join('\n');
+    var done = function () { setStatus('Resumo copiado.'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done, function () { setStatus('Não foi possível copiar. Selecione e copie os campos manualmente.', true); });
+    } else {
+      setStatus('Seu navegador não permite copiar automaticamente.', true);
+    }
+  });
+
+  $('reset').addEventListener('click', function () {
+    $('file').value = '';
+    $('result').classList.remove('show');
+    $('geoResult').classList.remove('show');
+    $('lrResult').classList.remove('show');
+    setLrStatus('');
+    setStatus('');
+    setGeoStatus('');
+    drop.focus();
+    window.scrollTo({ top: 0 });
+  });
+})();
+</script>
+</body>
+</html>
