@@ -272,7 +272,7 @@
         <label><input type="radio" name="alvo" value="residencia"> Endereço de residência do cliente</label>
       </fieldset>
       <div class="actions">
-        <button type="button" id="compare">Comparar</button>
+        <button type="button" id="compare">Recalcular</button>
       </div>
       <div class="geo-result" id="geoResult">
         <div class="dist" id="gDist">–</div>
@@ -294,7 +294,7 @@
       <h2>Distância entre a loja e a residência do cliente</h2>
       <p id="lrStatus" role="status" aria-live="polite"></p>
       <div class="actions">
-        <button type="button" id="compareLR">Calcular distância loja x residência</button>
+        <button type="button" id="compareLR">Recalcular distância</button>
       </div>
       <div class="geo-result" id="lrResult">
         <div class="dist" id="lrDist">–</div>
@@ -327,7 +327,7 @@
     </div>
   </section>
 
-  <p class="privacy">O PDF é lido no seu navegador. Só os botões de comparação e de análise com IA enviam dados (CEP, CNPJ, rua, cidade, coordenadas ou nome) a serviços externos.</p>
+  <p class="privacy">O PDF é lido no seu navegador. Ao carregar um contrato, a página consulta ViaCEP, BrasilAPI e serviços de mapa (OpenStreetMap e OpenCage) enviando CEP, CNPJ da loja, rua, cidade e coordenadas. O nome só é enviado à IA quando você clica em "Analisar nome com IA".</p>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -651,7 +651,11 @@
         return;
       }
       fill(extract(pages));
-      detectSignature(pages);
+      /* Distâncias calculadas automaticamente, em fila */
+      enqueue(compareLojaResidencia);
+      detectSignature(pages).then(function (temCoord) {
+        if (temCoord) enqueue(compare);
+      });
     } catch (e) {
       console.error(e);
       setStatus('Não foi possível ler o PDF. Verifique se o arquivo não está protegido ou corrompido.', true);
@@ -729,19 +733,20 @@
       } catch (e) {
         console.error(e);
         setGeoStatus('Não foi possível ler a página de assinaturas automaticamente. Digite a latitude e a longitude.', true);
-        return;
+        return false;
       }
     }
     if (!found) {
       setGeoStatus('Não encontrei o campo Lat/Long no PDF. Digite a latitude e a longitude para comparar.', true);
-      return;
+      return false;
     }
     fields.lat.value = String(found.lat);
     fields.lon.value = String(found.lon);
     var extra = [];
     if (found.data) extra.push('assinado em ' + found.data);
     if (found.disp) extra.push('dispositivo: ' + found.disp);
-    setGeoStatus('Coordenadas lidas do PDF' + (extra.length ? ' (' + extra.join(', ') + ')' : '') + '. Confira antes de comparar.');
+    setGeoStatus('Coordenadas lidas do PDF' + (extra.length ? ' (' + extra.join(', ') + ')' : '') + '.');
+    return true;
   }
 
   function haversineKm(a, b, c, d) {
@@ -1193,6 +1198,13 @@
     }
   }
 
+  /* Fila: as consultas de mapa rodam uma de cada vez (os serviços limitam 1 consulta por segundo) */
+  var geoQueue = Promise.resolve();
+  function enqueue(fn) {
+    geoQueue = geoQueue.then(fn).catch(function (e) { console.error(e); });
+    return geoQueue;
+  }
+
   /* ---------- eventos ---------- */
   var drop = $('drop');
   $('file').addEventListener('change', function (e) { handleFile(e.target.files[0]); });
@@ -1213,8 +1225,13 @@
     fields[k].addEventListener('input', markMissing);
   });
 
-  $('compare').addEventListener('click', compare);
-  $('compareLR').addEventListener('click', compareLojaResidencia);
+  $('compare').addEventListener('click', function () { enqueue(compare); });
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="alvo"]'), function (r) {
+    r.addEventListener('change', function () {
+      if (fields.lat.value && fields.lon.value) enqueue(compare);
+    });
+  });
+  $('compareLR').addEventListener('click', function () { enqueue(compareLojaResidencia); });
   $('iaBtn').addEventListener('click', analisarNome);
 
   $('copy').addEventListener('click', function () {
