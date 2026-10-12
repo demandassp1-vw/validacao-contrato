@@ -134,6 +134,15 @@
   .choice legend { font-size: .85rem; font-weight: 600; padding: 0; margin-bottom: 6px; }
   .choice label { display: inline-flex; align-items: center; gap: 7px; font-size: .95rem; cursor: pointer; }
   .choice input { accent-color: var(--teal); width: 1.05rem; height: 1.05rem; }
+  #iaStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
+  #iaStatus.error { color: var(--danger); }
+  .ia-warn { font-size: .88rem; color: var(--warn); margin: 0 0 12px; }
+  .ia-sec { margin: 0 0 14px; }
+  .ia-sec h3 { font-size: .85rem; font-weight: 600; margin: 0 0 4px; }
+  .ia-sec p, .ia-sec li { font-size: .92rem; margin: 0 0 4px; overflow-wrap: anywhere; }
+  .ia-sec ul { margin: 0; padding-left: 18px; }
+  .ia-sec .conf { color: var(--muted); font-size: .82rem; }
+  .ia-sec a { color: var(--teal); }
   #lrStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
   #lrStatus.error { color: var(--danger); }
   #geoStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
@@ -303,13 +312,22 @@
       </div>
     </div>
 
+    <div class="entry">
+      <h2>Análise do nome com IA</h2>
+      <p id="iaStatus" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <button type="button" id="iaBtn">Analisar nome com IA</button>
+      </div>
+      <div class="geo-result" id="iaResult"></div>
+    </div>
+
     <div class="actions">
       <button type="button" id="copy">Copiar resumo</button>
       <button type="button" class="ghost" id="reset">Ler outro PDF</button>
     </div>
   </section>
 
-  <p class="privacy">O PDF é lido no seu navegador. Só o botão "Comparar" envia CEP, CNPJ, rua, cidade e coordenadas a ViaCEP, BrasilAPI e OpenStreetMap.</p>
+  <p class="privacy">O PDF é lido no seu navegador. Só os botões de comparação e de análise com IA enviam dados (CEP, CNPJ, rua, cidade, coordenadas ou nome) a serviços externos.</p>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -317,6 +335,9 @@
 (function () {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  /* Endereço do seu Cloudflare Worker (veja worker.js). Ex.: 'https://analise-nome.seu-usuario.workers.dev' */
+  var WORKER_URL = 'https://extratorcontratos.demandas-sp1.workers.dev';
 
   var $ = function (id) { return document.getElementById(id); };
   var MONEY = /(\d{1,3}(?:\.\d{3})*,\d{2})/;
@@ -811,9 +832,71 @@
     return null;
   }
 
-  /* Localiza um endereço no mapa, do mais preciso (número) ao menos (cidade) */
+  /* ----- OpenCage (opcional, via Worker): mais um mecanismo de busca de endereço ----- */
+  var ocOff = false;
+  async function ocQuery(q, reverse) {
+    if (!WORKER_URL || ocOff) return null;
+    try {
+      var r = await fetch(WORKER_URL.replace(/\/+$/, '') + '/geocode', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: q, reverse: !!reverse })
+      });
+      if (r.status === 501) { ocOff = true; return null; }
+      if (!r.ok) return null;
+      var j = await r.json();
+      return j.resultado || null;
+    } catch (e) { return null; }
+  }
+  /* converte a resposta do OpenCage para o formato que o resto da página já usa */
+  function ocShape(o) {
+    var c = o.componentes || {};
+    return {
+      lat: String(o.lat), lon: String(o.lng), display_name: o.formatado,
+      address: {
+        road: c.road, house_number: c.house_number,
+        suburb: c.suburb || c.neighbourhood || c.city_district,
+        city: c.city || c.town || c.village || c.municipality,
+        'ISO3166-2-lvl4': c.state_code ? 'BR-' + c.state_code : ''
+      }
+    };
+  }
+  function ocNivel(o) {
+    var t = String(o.tipo || '');
+    if (/^(building|house|residential|commercial|company)/.test(t)) return 'número';
+    if (/^(road|street|path|footway|pedestrian)/.test(t)) return 'rua';
+    if (t === 'postcode') return 'CEP';
+    if (/^(neighbourhood|suburb|city_district)/.test(t)) return 'bairro';
+    return 'cidade';
+  }
+  var NIVEL_RANK = { 'número': 4, 'rua': 3, 'bairro': 2, 'CEP': 2, 'cidade': 1 };
+
+  async function reverseGeocode(lat, lon) {
+    var o = await ocQuery(lat + ',' + lon, true);
+    if (o) return ocShape(o);
+    return nominatimReverse(lat, lon);
+  }
+
+  /* Localiza um endereço no mapa, do mais preciso (número) ao menos (cidade).
+     Tenta o OpenCage (se o Worker tiver a chave) e o Nominatim, e fica com o melhor resultado. */
   async function geocodeEndereco(a) {
     var estado = UF_NOMES[a.uf] || a.uf;
+    var best = null;
+    var consider = function (cand) {
+      if (cand && (!best || NIVEL_RANK[cand.nivel] > NIVEL_RANK[best.nivel])) best = cand;
+    };
+
+    /* 1) OpenCage */
+    if (WORKER_URL && !ocOff && a.rua && a.cidade) {
+      var cepFmt = a.cep && a.cep.length === 8 ? a.cep.slice(0, 5) + '-' + a.cep.slice(5) : '';
+      var q = [a.rua + (a.numero ? ', ' + a.numero : ''), a.bairro, a.cidade, estado, cepFmt, 'Brasil']
+        .filter(Boolean).join(', ');
+      var o = await ocQuery(q, false);
+      if (o) consider({ r: ocShape(o), nivel: ocNivel(o) });
+      if (best && (best.nivel === 'número' || (best.nivel === 'rua' && !a.numero))) return best;
+      await sleep(1100);
+    }
+
+    /* 2) Nominatim, do mais preciso ao menos preciso */
     var tentativas = [];
     if (a.rua && a.numero && a.cidade) tentativas.push(['número', { street: a.numero + ' ' + a.rua, city: a.cidade, state: estado }]);
     if (a.rua && a.cidade) tentativas.push(['rua', { street: a.rua, city: a.cidade, state: estado }]);
@@ -822,11 +905,11 @@
     for (var i = 0; i < tentativas.length; i++) {
       try {
         var r = await nominatimSearch(tentativas[i][1]);
-        if (r) return { r: r, nivel: tentativas[i][0] };
+        if (r) { consider({ r: r, nivel: tentativas[i][0] }); break; }
       } catch (e) { /* tenta o próximo nível */ }
       await sleep(1100);
     }
-    return null;
+    return best;
   }
 
   /* Endereço de residência: rua pelo CEP (ViaCEP) e número pelo cadastro */
@@ -839,6 +922,7 @@
       numero: mNum ? mNum[1] : '',
       cidade: (via && via.localidade) || fields.cidade.value.trim(),
       uf: ((via && via.uf) || fields.uf.value).trim().toUpperCase(),
+      bairro: (via && via.bairro) || fields.bairro.value.trim(),
       cep: cep, nomeLocal: ''
     };
   }
@@ -879,7 +963,7 @@
         rotuloAlvo = 'Endereço de residência do cliente';
         rotuloCurto = 'da residência';
       }
-      var rev = await nominatimReverse(lat, lon);
+      var rev = await reverseGeocode(lat, lon);
       await sleep(1100);
       var cad = await geocodeEndereco(end);
       if (!cad) {
@@ -906,14 +990,14 @@
       $('gSign').textContent = describeAddr(rev) || 'Endereço não encontrado para essas coordenadas';
       $('gCadLabel').textContent = rotuloAlvo;
       var nivelTxt = { 'número': 'localizado pelo número', 'rua': 'localizado só pela rua (número não encontrado no mapa)',
-        'CEP': 'localizado só pelo CEP', 'cidade': 'localizado só pela cidade' }[cad.nivel];
+        'bairro': 'localizado só pelo bairro', 'CEP': 'localizado só pelo CEP', 'cidade': 'localizado só pela cidade' }[cad.nivel];
       $('gCad').textContent = describeAddr(cad.r) + ' (' + nivelTxt + ')';
       $('lnkSign').href = 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lon + '#map=16/' + lat + '/' + lon;
       $('lnkCad').href = 'https://www.openstreetmap.org/?mlat=' + clat + '&mlon=' + clon + '#map=16/' + clat + '/' + clon;
       $('lnkCad').textContent = alvo === 'loja' ? 'Ver a loja no mapa' : 'Ver a residência no mapa';
       $('geoResult').classList.add('show');
-      var aviso = cad.nivel === 'cidade' || cad.nivel === 'CEP'
-        ? 'O endereço só foi localizado pelo ' + (cad.nivel === 'CEP' ? 'CEP' : 'centro da cidade') + ', então a distância tem margem de erro maior.'
+      var aviso = (cad.nivel === 'cidade' || cad.nivel === 'CEP' || cad.nivel === 'bairro')
+        ? 'O endereço só foi localizado pelo ' + (cad.nivel === 'CEP' ? 'CEP' : cad.nivel === 'bairro' ? 'bairro' : 'centro da cidade') + ', então a distância tem margem de erro maior.'
         : '';
       setGeoStatus(aviso);
     } catch (e) {
@@ -968,7 +1052,7 @@
       }
 
       var nivelTxt = { 'número': 'localizado pelo número', 'rua': 'localizado só pela rua (número não encontrado no mapa)',
-        'CEP': 'localizado só pelo CEP', 'cidade': 'localizado só pela cidade' };
+        'bairro': 'localizado só pelo bairro', 'CEP': 'localizado só pelo CEP', 'cidade': 'localizado só pela cidade' };
       $('lrDist').textContent = fmtDist(km);
       var v = $('lrVerdict');
       v.textContent = txt;
@@ -979,13 +1063,131 @@
       $('lnkLrLoja').href = 'https://www.openstreetmap.org/?mlat=' + la + '&mlon=' + lo + '#map=16/' + la + '/' + lo;
       $('lnkLrRes').href = 'https://www.openstreetmap.org/?mlat=' + ra + '&mlon=' + ro + '#map=16/' + ra + '/' + ro;
       var fracos = [];
-      if (gl.nivel === 'CEP' || gl.nivel === 'cidade') fracos.push('a loja');
-      if (gr.nivel === 'CEP' || gr.nivel === 'cidade') fracos.push('a residência');
+      if (/^(CEP|cidade|bairro)$/.test(gl.nivel)) fracos.push('a loja');
+      if (/^(CEP|cidade|bairro)$/.test(gr.nivel)) fracos.push('a residência');
       $('lrResult').classList.add('show');
-      setLrStatus(fracos.length ? 'Para ' + fracos.join(' e ') + ', o mapa só localizou o CEP ou o centro da cidade, então a distância tem margem de erro maior.' : '');
+      setLrStatus(fracos.length ? 'Para ' + fracos.join(' e ') + ', o mapa só localizou o CEP, o bairro ou o centro da cidade, então a distância tem margem de erro maior.' : '');
     } catch (e) {
       console.error(e);
       setLrStatus('Falha ao consultar os serviços de mapa. Verifique a conexão e tente de novo em instantes.', true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+
+  /* ---------- análise do nome com IA ---------- */
+  function setIaStatus(msg, isError) {
+    var g = $('iaStatus');
+    g.textContent = msg;
+    g.className = isError ? 'error' : '';
+  }
+  function mk(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+  function iaSection(titulo) {
+    var d = mk('div', null, 'ia-sec');
+    d.appendChild(mk('h3', titulo));
+    return d;
+  }
+  function iaList(items, fmt) {
+    var ul = document.createElement('ul');
+    items.forEach(function (it) {
+      var li = document.createElement('li');
+      fmt(li, it);
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+
+  function renderIa(data) {
+    var box = $('iaResult');
+    box.textContent = '';
+    box.appendChild(mk('p', 'Resultado de IA com busca na web. Pode misturar pessoas homônimas: confira as fontes antes de usar.', 'ia-warn'));
+
+    var r = data.resultado;
+    if (!r) {
+      var raw = iaSection('Resposta da IA (formato inesperado)');
+      raw.appendChild(mk('p', data.texto || 'Sem conteúdo.'));
+      box.appendChild(raw);
+    } else {
+      if (r.resumo) { var a = iaSection('Resumo'); a.appendChild(mk('p', r.resumo)); box.appendChild(a); }
+      if (r.sobrenome) {
+        var b = iaSection('Sobrenome');
+        b.appendChild(mk('p', (r.sobrenome.avaliacao || 'indeterminado') + (r.sobrenome.explicacao ? '. ' + r.sobrenome.explicacao : '')));
+        box.appendChild(b);
+      }
+      var v = Array.isArray(r.vinculos_empresariais) ? r.vinculos_empresariais : [];
+      var c = iaSection('Vínculos empresariais encontrados');
+      if (v.length) c.appendChild(iaList(v, function (li, it) {
+        li.appendChild(document.createTextNode(it.descricao || ''));
+        if (it.confianca) li.appendChild(mk('span', ' (confiança ' + it.confianca + ')', 'conf'));
+      }));
+      else c.appendChild(mk('p', 'Nada encontrado.'));
+      box.appendChild(c);
+
+      var pr = Array.isArray(r.presenca_online) ? r.presenca_online : [];
+      var d = iaSection('Presença online');
+      if (pr.length) d.appendChild(iaList(pr, function (li, it) {
+        li.appendChild(document.createTextNode((it.rede ? it.rede + ': ' : '') + (it.descricao || '')));
+        if (it.confianca) li.appendChild(mk('span', ' (confiança ' + it.confianca + ')', 'conf'));
+      }));
+      else d.appendChild(mk('p', 'Nada encontrado.'));
+      box.appendChild(d);
+
+      if (r.homonimos) { var h = iaSection('Risco de homônimo'); h.appendChild(mk('p', r.homonimos)); box.appendChild(h); }
+      var al = Array.isArray(r.alertas) ? r.alertas : [];
+      if (al.length) {
+        var e = iaSection('Pontos para conferir');
+        e.appendChild(iaList(al, function (li, t) { li.textContent = t; }));
+        box.appendChild(e);
+      }
+    }
+
+    var fontes = (data.fontes || []).filter(function (f) { return /^https:\/\//.test(f.url); });
+    var f = iaSection('Fontes consultadas');
+    if (fontes.length) f.appendChild(iaList(fontes, function (li, it) {
+      var a = mk('a', it.titulo || it.url);
+      a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      li.appendChild(a);
+    }));
+    else f.appendChild(mk('p', 'A IA não listou fontes. Trate o resultado com mais cautela.'));
+    box.appendChild(f);
+    box.classList.add('show');
+  }
+
+  async function analisarNome() {
+    var nome = fields.nome.value.trim();
+    if (nome.length < 5) { setIaStatus('Preencha o nome do cliente.', true); return; }
+    if (!WORKER_URL) {
+      setIaStatus('Falta configurar WORKER_URL no início do script, com o endereço do seu Cloudflare Worker.', true);
+      return;
+    }
+    var cidade = fields.cidade.value.trim(), uf = fields.uf.value.trim();
+    if (!window.confirm('O nome e a cidade do cliente serão enviados ao seu Worker na Cloudflare e a um serviço de IA externo (Google Gemini) para pesquisa na web. Continuar?')) return;
+    var btn = $('iaBtn');
+    btn.disabled = true;
+    $('iaResult').classList.remove('show');
+    setIaStatus('Pesquisando e analisando. Isso pode levar até um minuto…');
+    try {
+      var resp = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nome, cidade: cidade, uf: uf })
+      });
+      var data = await resp.json().catch(function () { return {}; });
+      if (!resp.ok) {
+        setIaStatus(data.erro || 'A análise falhou (erro ' + resp.status + ').', true);
+        return;
+      }
+      renderIa(data);
+      setIaStatus('');
+    } catch (e) {
+      console.error(e);
+      setIaStatus('Não consegui falar com o Worker. Confira o endereço em WORKER_URL e se o ALLOWED_ORIGIN do Worker é o endereço deste site.', true);
     } finally {
       btn.disabled = false;
     }
@@ -1013,6 +1215,7 @@
 
   $('compare').addEventListener('click', compare);
   $('compareLR').addEventListener('click', compareLojaResidencia);
+  $('iaBtn').addEventListener('click', analisarNome);
 
   $('copy').addEventListener('click', function () {
     var vv = toNum(fields.valorVeic.value);
@@ -1046,6 +1249,8 @@
     $('result').classList.remove('show');
     $('geoResult').classList.remove('show');
     $('lrResult').classList.remove('show');
+    $('iaResult').classList.remove('show');
+    setIaStatus('');
     setLrStatus('');
     setStatus('');
     setGeoStatus('');
