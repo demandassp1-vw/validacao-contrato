@@ -97,11 +97,11 @@
   .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .field.wide { grid-column: 1 / -1; }
   .field label { font-size: .85rem; font-weight: 600; }
-  .field input {
+  .field input, .field select {
     font: inherit; color: var(--ink); background: transparent;
     border: 1px solid var(--line); border-radius: 4px; padding: 9px 10px; width: 100%;
   }
-  .field input:focus-visible { outline: 3px solid var(--teal); outline-offset: 1px; border-color: var(--teal); }
+  .field input:focus-visible, .field select:focus-visible { outline: 3px solid var(--teal); outline-offset: 1px; border-color: var(--teal); }
   .field input.missing { border-color: var(--warn); }
   .hint { font-size: .82rem; color: var(--muted); min-height: 1.2em; }
   .hint.warn { color: var(--warn); }
@@ -143,6 +143,9 @@
   .ia-sec ul { margin: 0; padding-left: 18px; }
   .ia-sec .conf { color: var(--muted); font-size: .82rem; }
   .ia-sec a { color: var(--teal); }
+  #riskStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
+  #riskStatus.error { color: var(--danger); }
+  .risk-sep { border-top: 1px solid var(--line); margin: 16px 0 14px; }
   #lrStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
   #lrStatus.error { color: var(--danger); }
   #geoStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
@@ -250,6 +253,29 @@
           <label for="fCnpj">CNPJ da loja</label>
           <input id="fCnpj" type="text" inputmode="numeric" autocomplete="off">
         </div>
+        <div class="field">
+          <label for="fProf">Profissão</label>
+          <input id="fProf" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fRenda">Renda mensal (R$)</label>
+          <input id="fRenda" type="text" inputmode="decimal" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fParcela">Valor da parcela (R$)</label>
+          <input id="fParcela" type="text" inputmode="decimal" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fPrazo">Prazo (meses)</label>
+          <input id="fPrazo" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fTipoLoja">Tipo da loja</label>
+          <select id="fTipoLoja">
+            <option value="multimarcas">Multimarcas (revenda)</option>
+            <option value="concessionaria">Concessionária (marca)</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -265,6 +291,11 @@
           <label for="fLon">Longitude</label>
           <input id="fLon" type="text" inputmode="decimal" autocomplete="off">
         </div>
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <label for="fAssEmail">E-mail da assinatura digital</label>
+        <input id="fAssEmail" type="text" autocomplete="off">
+        <span class="hint" id="hAssEmail">Lido do PDF quando possível. Confira e corrija se precisar; é usado na análise de risco.</span>
       </div>
       <fieldset class="choice">
         <legend>Comparar o local da assinatura com</legend>
@@ -319,6 +350,15 @@
         <button type="button" id="iaBtn">Analisar nome com IA</button>
       </div>
       <div class="geo-result" id="iaResult"></div>
+    </div>
+
+    <div class="entry">
+      <h2>Análise de risco da operação</h2>
+      <p id="riskStatus" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <button type="button" id="riskBtn">Analisar risco da operação</button>
+      </div>
+      <div class="geo-result" id="riskResult"></div>
     </div>
 
     <div class="actions">
@@ -458,7 +498,7 @@
     var orc = find(/OR[ÇC]AMENTO DE OPERA[ÇC][ÃA]O DE CR[ÉE]DITO/i);
     var fText = ficha ? ficha.text : all;
 
-    var out = { nome: '', nasc: '', cep: '', email: '', endereco: '', bairro: '', cidade: '', uf: '', loja: '', cnpjLoja: '', veiculo: '', marca: '', ano: '', valorVeic: null, entrada: null };
+    var out = { nome: '', nasc: '', cep: '', email: '', endereco: '', bairro: '', cidade: '', uf: '', loja: '', cnpjLoja: '', profissao: '', renda: null, parcela: null, prazo: null, veiculo: '', marca: '', ano: '', valorVeic: null, entrada: null };
 
     /* Ficha cadastral */
     var m = fText.match(new RegExp('\\b\\d{11}\\s+([' + NAME_CHARS + "][" + NAME_CHARS + "' ]{4,}?)\\s+\\d{5,}"));
@@ -504,6 +544,19 @@
     if (t2) out.cidade = t2[0].trim();
     var t3 = textBelow(pg, /^(Estado|UF)$/, /^[A-Z]{2}$/, 4);
     if (t3) out.uf = t3[0];
+
+    /* Profissão e renda (ficha); parcela e prazo (Quadro 7 da CCB) */
+    var tp = textBelow(ficha, /^PROFISS/i, /^[A-ZÀ-Ý][A-ZÀ-Ý' /.-]+$/, 40);
+    if (tp) out.profissao = tp[0].trim();
+    out.renda = valueBelow(ficha, /^RENDA MENSAL/i);
+    if (q5) {
+      var parc = q5.items.filter(function (i) { return /^\d{2}\s*-\s*\d{1,3}(?:\.\d{3})*,\d{2}$/.test(i.s); });
+      if (parc.length) {
+        var p1 = parc.find(function (i) { return /^01\s*-/.test(i.s); }) || parc[0];
+        out.parcela = toNum(p1.s.split('-')[1]);
+        out.prazo = parc.length;
+      }
+    }
 
     /* Loja: CNPJ e nome na linha "Concessionária / Revenda / Lojista" do orçamento */
     if (orc) {
@@ -558,8 +611,12 @@
     nome: $('fNome'), nasc: $('fNasc'), idade: $('fIdade'), cep: $('fCep'),
     email: $('fEmail'), veiculo: $('fVeiculo'), valorVeic: $('fValorVeic'), entrada: $('fEntrada'),
     endereco: $('fEnd'), bairro: $('fBairro'), cidade: $('fCidade'), uf: $('fUf'),
-    lat: $('fLat'), lon: $('fLon'), loja: $('fLoja'), cnpj: $('fCnpj')
+    lat: $('fLat'), lon: $('fLon'), loja: $('fLoja'), cnpj: $('fCnpj'),
+    prof: $('fProf'), renda: $('fRenda'), parcela: $('fParcela'), prazo: $('fPrazo'),
+    assEmail: $('fAssEmail'), tipoLoja: $('fTipoLoja')
   };
+  var dadosPdf = {};
+  var sigInfo = null;
 
   function setStatus(msg, isError) {
     var s = $('status');
@@ -617,6 +674,11 @@
     fields.uf.value = d.uf;
     fields.loja.value = d.loja ? titleCase(d.loja) : '';
     fields.cnpj.value = d.cnpjLoja;
+    fields.prof.value = d.profissao ? titleCase(d.profissao) : '';
+    fields.renda.value = d.renda != null ? plain(d.renda) : '';
+    fields.parcela.value = d.parcela != null ? plain(d.parcela) : '';
+    fields.prazo.value = d.prazo != null ? String(d.prazo) : '';
+    dadosPdf = d;
     fields.veiculo.value = d.veiculo;
     fields.valorVeic.value = d.valorVeic != null ? plain(d.valorVeic) : '';
     fields.entrada.value = d.entrada != null ? plain(d.entrada) : '';
@@ -641,6 +703,10 @@
       setStatus('Esse arquivo não é um PDF. Escolha o PDF da CCB.', true);
       return;
     }
+    geoRes = { assin: {}, lr: null, lojaCidade: '', resCidade: '' };
+    sigInfo = null;
+    $('riskResult').classList.remove('show');
+    setRiskStatus('');
     setStatus('Lendo o PDF…');
     $('result').classList.remove('show');
     try {
@@ -699,7 +765,12 @@
     if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
     var dt = text.match(/Data:\s*(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})/);
     var dev = text.match(/Dispositivo:\s*([A-Za-z]+)/);
-    return { lat: lat, lon: lon, data: dt ? dt[1] + ' ' + dt[2] : '', disp: dev ? dev[1] : '' };
+    /* e-mail do signatário: procura perto das coordenadas, de preferência depois da palavra "E-mail" */
+    var janela = text.slice(Math.max(0, m.index - 400), m.index + m[0].length + 400);
+    var em = janela.match(/E-?mail\s*:?\s*([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})/i) ||
+             janela.match(/([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})/i);
+    return { lat: lat, lon: lon, data: dt ? dt[1] + ' ' + dt[2] : '', disp: dev ? dev[1] : '',
+      email: em ? em[1].toLowerCase() : '' };
   }
 
   async function renderPageCanvas(pageNum, scale) {
@@ -716,6 +787,7 @@
   async function detectSignature(pages) {
     $('geoResult').classList.remove('show');
     fields.lat.value = ''; fields.lon.value = '';
+    fields.assEmail.value = '';
     var found = parseSignature(pages.map(function (p) { return p.text; }).join(' '));
     if (!found) {
       /* Na maioria dos PDFs a página de assinaturas é uma imagem: lê por OCR */
@@ -740,8 +812,11 @@
       setGeoStatus('Não encontrei o campo Lat/Long no PDF. Digite a latitude e a longitude para comparar.', true);
       return false;
     }
+    sigInfo = found;
     fields.lat.value = String(found.lat);
     fields.lon.value = String(found.lon);
+    fields.assEmail.value = found.email || '';
+    $('hAssEmail').textContent = found.email ? 'Lido do PDF. Confira se é mesmo o e-mail do cliente.' : 'Não encontrei o e-mail na assinatura. Digite se quiser que ele entre na análise.';
     var extra = [];
     if (found.data) extra.push('assinado em ' + found.data);
     if (found.disp) extra.push('dispositivo: ' + found.disp);
@@ -961,6 +1036,7 @@
           return;
         }
         end = loja;
+        geoRes.lojaCidade = loja.cidade || '';
         rotuloAlvo = 'Endereço da loja' + (loja.nome ? ' (' + titleCase(loja.nome) + ')' : '');
         rotuloCurto = 'da loja';
       } else {
@@ -977,6 +1053,7 @@
       }
       var clat = parseFloat(cad.r.lat), clon = parseFloat(cad.r.lon);
       var km = haversineKm(lat, lon, clat, clon);
+      geoRes.assin[alvo] = { km: km, nivel: cad.nivel };
 
       var cidadeAssin = cityOf(rev && rev.address);
       var cidadeAlvo = end.cidade;
@@ -1047,6 +1124,9 @@
       var la = parseFloat(gl.r.lat), lo = parseFloat(gl.r.lon);
       var ra = parseFloat(gr.r.lat), ro = parseFloat(gr.r.lon);
       var km = haversineKm(la, lo, ra, ro);
+      geoRes.lr = { km: km, nivelLoja: gl.nivel, nivelRes: gr.nivel };
+      geoRes.lojaCidade = loja.cidade || '';
+      geoRes.resCidade = res.cidade || '';
 
       var cls, txt;
       if (km <= 5) { cls = 'near'; txt = 'Loja perto da residência do cliente'; }
@@ -1205,6 +1285,252 @@
     return geoQueue;
   }
 
+
+  /* ---------- análise de risco da operação ---------- */
+  var geoRes = { assin: {}, lr: null, lojaCidade: '', resCidade: '' };
+  var DOMINIOS_DESCARTAVEIS = ['mailinator.com', 'guerrillamail.com', 'tempmail.com', '10minutemail.com',
+    'yopmail.com', 'sharklasers.com', 'trashmail.com', 'temp-mail.org'];
+
+  function setRiskStatus(msg, isError) {
+    var g = $('riskStatus');
+    g.textContent = msg;
+    g.className = isError ? 'error' : '';
+  }
+
+  /* As duas assinaturas analisadas tinham exatamente o centro de São Paulo: ponto padrão, não GPS */
+  function coordAproximada() {
+    var lat = numCoord(fields.lat.value), lon = numCoord(fields.lon.value);
+    return lat != null && lon != null && Math.abs(lat + 23.5475) < 0.002 && Math.abs(lon + 46.6361) < 0.002;
+  }
+
+  /* Limites usados nas regras. Para mudar um critério, altere o número aqui. */
+  var LIMITES = {
+    veiculoAlto: 100000,  /* valor do veículo (R$) a partir do qual a entrada alta chama atenção */
+    entradaAltaPct: 40,   /* entrada acima de X% do valor do veículo */
+    rendaAlta: 20000,     /* renda mensal declarada considerada alta (R$) */
+    anosUsado: 2          /* veículo com X anos ou mais de fabricação conta como usado */
+  };
+
+  function idadeVeiculoAnos() {
+    var m = String(dadosPdf.ano || '').match(/^((?:19|20)\d{2})/);
+    return m ? new Date().getFullYear() - parseInt(m[1], 10) : null;
+  }
+
+  function cidadesDiferem() {
+    return !!(geoRes.resCidade && geoRes.lojaCidade && norm(geoRes.resCidade) !== norm(geoRes.lojaCidade));
+  }
+
+  /* true se a parte do e-mail antes do @ tem alguma parte do nome; null se não dá para avaliar */
+  function emailTemNome(email) {
+    if (!email || email.indexOf('@') < 1) return null;
+    var letras = norm(email.split('@')[0]).replace(/[^a-z]/g, '');
+    var tokens = norm(fields.nome.value).split(/\s+/).filter(function (t) {
+      return t.length >= 3 && !/^(dos|das|del|van|von)$/.test(t);
+    });
+    if (!tokens.length) return null;
+    return tokens.some(function (t) { return letras.indexOf(t) !== -1; });
+  }
+
+  /* Regras simples e transparentes. Cada sinal mostra seus pontos. Não é probabilidade de fraude. */
+  function sinaisLocais() {
+    var sinais = [];
+    var add = function (txt, pts) { sinais.push({ texto: txt, pontos: pts }); };
+
+    /* e-mail do cadastro x nome */
+    var email = fields.email.value.trim().toLowerCase();
+    if (email.indexOf('@') > 0) {
+      var partes = email.split('@');
+      if (emailTemNome(email) === false) add('O e-mail do cadastro não contém nenhuma parte do nome do cliente', 10);
+      if ((partes[0].match(/\d/g) || []).length >= 4) add('E-mail com quatro ou mais números', 5);
+      if (DOMINIOS_DESCARTAVEIS.indexOf(partes[1]) !== -1) add('E-mail de serviço descartável (' + partes[1] + ')', 25);
+    }
+
+    /* e-mail da assinatura digital x e-mail do cadastro */
+    var emailAss = fields.assEmail.value.trim().toLowerCase();
+    if (emailAss.indexOf('@') > 0 && email.indexOf('@') > 0 && emailAss !== email) {
+      add('E-mail da assinatura digital (' + emailAss + ') é diferente do e-mail do cadastro (' + email + ')', 25);
+      if (emailTemNome(emailAss) === false) add('O e-mail da assinatura também não tem relação com o nome do cliente', 5);
+    }
+
+    /* loja x residência */
+    var lr = geoRes.lr;
+    if (lr) {
+      var difTxt = cidadesDiferem() ? ' (cliente em ' + geoRes.resCidade + ', loja em ' + geoRes.lojaCidade + ')' : '';
+      if (lr.nivelLoja === 'cidade' || lr.nivelRes === 'cidade') {
+        if (cidadesDiferem()) add('Cliente mora em cidade diferente da loja' + difTxt + '; distância não medida com precisão', 5);
+        else add('Distância loja x residência não avaliada: endereço localizado só pela cidade', 0);
+      } else if (lr.km > 100) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente' + difTxt, 20);
+      else if (lr.km > 30) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente' + difTxt, 10);
+    }
+
+    /* local da assinatura */
+    if (coordAproximada()) {
+      add('Coordenadas da assinatura coincidem com o centro de São Paulo (provável localização aproximada); distância da assinatura desconsiderada', 0);
+    } else {
+      var aL = geoRes.assin.loja, aR = geoRes.assin.residencia;
+      if (aR && aR.nivel !== 'cidade' && aR.km > 50 && (!aL || aL.km > 50)) {
+        add('Assinatura a ' + fmtDist(aR.km) + ' da residência' + (aL ? ' e a ' + fmtDist(aL.km) + ' da loja' : ''), 15);
+      } else if (!aR && aL && aL.nivel !== 'cidade' && aL.km > 100) {
+        add('Assinatura a ' + fmtDist(aL.km) + ' da loja', 5);
+      }
+    }
+
+    /* renda, parcela, veículo e entrada */
+    var renda = toNum(fields.renda.value), parcela = toNum(fields.parcela.value);
+    var vv = toNum(fields.valorVeic.value), en = toNum(fields.entrada.value);
+    if (renda && parcela) {
+      var pr = parcela / renda * 100;
+      if (pr > 50) add('Parcela de ' + pctFmt(pr) + ' da renda declarada', 20);
+      else if (pr > 35) add('Parcela de ' + pctFmt(pr) + ' da renda declarada', 10);
+    }
+    if (renda && vv && vv / (renda * 12) > 4) {
+      add('Valor do veículo equivale a ' + (vv / (renda * 12)).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' anos de renda declarada', 10);
+    }
+    if (vv && en != null && vv > 0 && en / vv * 100 < 10) add('Entrada de apenas ' + pctFmt(en / vv * 100), 5);
+
+    /* padrão: veículo caro com entrada alta */
+    if (vv && en != null && vv > LIMITES.veiculoAlto && en / vv * 100 > LIMITES.entradaAltaPct) {
+      add('Veículo de ' + brl(vv) + ' com entrada de ' + pctFmt(en / vv * 100) + ' (acima de ' + brl(LIMITES.veiculoAlto) + ' e de ' + LIMITES.entradaAltaPct + '% de entrada)', 15);
+    }
+
+    /* padrão: renda alta declarada comprando veículo usado em loja multimarcas */
+    var idadeV = idadeVeiculoAnos();
+    if (renda && renda >= LIMITES.rendaAlta && idadeV != null && idadeV >= LIMITES.anosUsado && fields.tipoLoja.value === 'multimarcas') {
+      add('Renda declarada de ' + brl(renda) + ' comprando veículo usado (' + dadosPdf.ano + ') em loja multimarcas', 10);
+    }
+
+    var pontos = Math.min(100, sinais.reduce(function (n, x) { return n + x.pontos; }, 0));
+    var nivel = pontos >= 45 ? 'alto' : pontos >= 20 ? 'médio' : 'baixo';
+    return { sinais: sinais, pontos: pontos, nivel: nivel };
+  }
+
+  function montarFatos(r) {
+    var renda = toNum(fields.renda.value), parcela = toNum(fields.parcela.value);
+    var vv = toNum(fields.valorVeic.value), en = toNum(fields.entrada.value);
+    var arred = function (x) { return x == null ? null : Math.round(x * 10) / 10; };
+    var lr = geoRes.lr, aL = geoRes.assin.loja, aR = geoRes.assin.residencia;
+    return {
+      nome: fields.nome.value.trim(),
+      email: fields.email.value.trim(),
+      email_assinatura: fields.assEmail.value.trim(),
+      profissao: fields.prof.value.trim(),
+      renda_mensal: renda,
+      cidade: fields.cidade.value.trim(), uf: fields.uf.value.trim(),
+      veiculo: { marca: dadosPdf.marca || '', modelo: fields.veiculo.value.trim(), ano: dadosPdf.ano || '', idade_anos: idadeVeiculoAnos(), valor: vv, entrada: en,
+        entrada_pct: vv && en != null ? arred(en / vv * 100) : null },
+      financiamento: { parcela: parcela, prazo_meses: toNum(fields.prazo.value),
+        parcela_sobre_renda_pct: renda && parcela ? arred(parcela / renda * 100) : null },
+      loja: { nome: fields.loja.value.trim(), cidade: geoRes.lojaCidade || '', tipo: fields.tipoLoja.value },
+      distancias: {
+        loja_residencia_km: lr ? arred(lr.km) : null,
+        loja_residencia_precisao: lr ? (lr.nivelLoja + ' / ' + lr.nivelRes) : null,
+        assinatura_loja_km: aL ? arred(aL.km) : null,
+        assinatura_residencia_km: aR ? arred(aR.km) : null,
+        cidades_diferentes: (geoRes.resCidade && geoRes.lojaCidade) ? cidadesDiferem() : null,
+        coordenadas_aproximadas: coordAproximada()
+      },
+      assinatura: { dispositivo: sigInfo ? sigInfo.disp : '' },
+      pontuacao_local: r.pontos,
+      sinais_locais: r.sinais.map(function (x) { return x.texto + ' (' + x.pontos + ' pontos)'; })
+    };
+  }
+
+  function renderRiscoLocal(r) {
+    var box = $('riskResult');
+    box.textContent = '';
+    box.appendChild(mk('p', 'Pontuação de alerta calculada por regras no seu navegador. Não é probabilidade de fraude.', 'ia-warn'));
+    box.appendChild(mk('div', r.pontos + ' / 100', 'dist'));
+    box.appendChild(mk('div', 'Nível de alerta ' + r.nivel, 'verdict ' + (r.nivel === 'alto' ? 'far' : r.nivel === 'médio' ? 'mid' : 'near')));
+    var sec = iaSection('Sinais considerados');
+    if (r.sinais.length) {
+      sec.appendChild(iaList(r.sinais, function (li, x) {
+        li.appendChild(document.createTextNode(x.texto));
+        li.appendChild(mk('span', ' (+' + x.pontos + ')', 'conf'));
+      }));
+    } else sec.appendChild(mk('p', 'Nenhum sinal de alerta pelas regras.'));
+    box.appendChild(sec);
+    box.classList.add('show');
+    return box;
+  }
+
+  function renderRiscoIa(box, data) {
+    box.appendChild(mk('div', null, 'risk-sep'));
+    box.appendChild(mk('p', 'Análise da IA, sem busca na web. É um apoio à conferência humana, não uma decisão.', 'ia-warn'));
+    var r = data.resultado;
+    if (!r) {
+      var raw = iaSection('Resposta da IA (formato inesperado)');
+      raw.appendChild(mk('p', data.texto || 'Sem conteúdo.'));
+      box.appendChild(raw);
+      return;
+    }
+    var n = iaSection('Nível de alerta segundo a IA');
+    n.appendChild(mk('p', (r.nivel || 'indeterminado') + (r.resumo ? '. ' + r.resumo : '')));
+    box.appendChild(n);
+    if (r.email) {
+      var e = iaSection('E-mail x nome');
+      e.appendChild(mk('p', (r.email.consistencia || 'indeterminado') + (r.email.explicacao ? '. ' + r.email.explicacao : '')));
+      box.appendChild(e);
+    }
+    var sg = Array.isArray(r.sinais) ? r.sinais : [];
+    if (sg.length) {
+      var s1 = iaSection('Indícios de alerta');
+      s1.appendChild(iaList(sg, function (li, it) {
+        li.appendChild(document.createTextNode(it.descricao || ''));
+        if (it.peso) li.appendChild(mk('span', ' (peso ' + it.peso + ')', 'conf'));
+      }));
+      box.appendChild(s1);
+    }
+    var cp = Array.isArray(r.contrapontos) ? r.contrapontos : [];
+    if (cp.length) {
+      var s2 = iaSection('Fatores que reduzem a suspeita');
+      s2.appendChild(iaList(cp, function (li, t) { li.textContent = t; }));
+      box.appendChild(s2);
+    }
+    var cf = Array.isArray(r.conferir) ? r.conferir : [];
+    if (cf.length) {
+      var s3 = iaSection('O que conferir');
+      s3.appendChild(iaList(cf, function (li, t) { li.textContent = t; }));
+      box.appendChild(s3);
+    }
+    if (r.limites) {
+      var s4 = iaSection('Limites desta análise');
+      s4.appendChild(mk('p', r.limites));
+      box.appendChild(s4);
+    }
+  }
+
+  async function analisarRisco() {
+    if (!fields.nome.value.trim()) { setRiskStatus('Envie o PDF ou preencha os dados do cliente primeiro.', true); return; }
+    var r = sinaisLocais();
+    var box = renderRiscoLocal(r);
+    if (!WORKER_URL) {
+      setRiskStatus('Pontuação local calculada. Para a análise da IA, configure WORKER_URL.');
+      return;
+    }
+    if (!window.confirm('Serão enviados ao seu Worker e ao Google Gemini: nome, e-mails (do cadastro e da assinatura), profissão, renda, valores do veículo e do financiamento, cidade, loja e distâncias. Não são enviados CPF, endereço, telefone nem idade. Continuar?')) {
+      setRiskStatus('Pontuação local calculada. A IA não foi consultada.');
+      return;
+    }
+    var btn = $('riskBtn');
+    btn.disabled = true;
+    setRiskStatus('Consultando a IA…');
+    try {
+      var resp = await fetch(WORKER_URL.replace(/\/+$/, '') + '/risco', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fatos: montarFatos(r) })
+      });
+      var data = await resp.json().catch(function () { return {}; });
+      if (!resp.ok) { setRiskStatus(data.erro || 'A análise falhou (erro ' + resp.status + ').', true); return; }
+      renderRiscoIa(box, data);
+      setRiskStatus('');
+    } catch (e) {
+      console.error(e);
+      setRiskStatus('Não consegui falar com o Worker. Confira o endereço em WORKER_URL.', true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   /* ---------- eventos ---------- */
   var drop = $('drop');
   $('file').addEventListener('change', function (e) { handleFile(e.target.files[0]); });
@@ -1233,6 +1559,7 @@
   });
   $('compareLR').addEventListener('click', function () { enqueue(compareLojaResidencia); });
   $('iaBtn').addEventListener('click', analisarNome);
+  $('riskBtn').addEventListener('click', analisarRisco);
 
   $('copy').addEventListener('click', function () {
     var vv = toNum(fields.valorVeic.value);
@@ -1267,6 +1594,8 @@
     $('geoResult').classList.remove('show');
     $('lrResult').classList.remove('show');
     $('iaResult').classList.remove('show');
+    $('riskResult').classList.remove('show');
+    setRiskStatus('');
     setIaStatus('');
     setLrStatus('');
     setStatus('');
