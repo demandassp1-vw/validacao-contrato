@@ -78,6 +78,13 @@
   }
   .field input:focus-visible { outline: 2px solid var(--verde-escuro); outline-offset: 1px; border-color: var(--verde-escuro); }
   .field input.missing { border-color: var(--warn); }
+  .fields.checks { grid-template-columns: repeat(3, 1fr); }
+  .field select {
+    font: inherit; font-size: .88rem; color: var(--ink); background: #fff;
+    border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 100%;
+  }
+  .field select:focus-visible { outline: 2px solid var(--verde-escuro); outline-offset: 1px; border-color: var(--verde-escuro); }
+  @media (max-width: 640px) { .fields.checks { grid-template-columns: 1fr; } }
   .field textarea {
     font: inherit; font-size: .88rem; color: var(--ink); background: #fff; resize: vertical;
     border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 100%;
@@ -326,6 +333,24 @@
         <label for="fParecer">Parecer do GCM (obrigatório quando há risco)</label>
         <textarea id="fParecer" rows="4" autocomplete="off"></textarea>
         <span class="hint warn" id="hParecer"></span>
+      </div>
+    </div>
+
+    <div class="entry" id="checkBox">
+      <h2>Conferências do gestor</h2>
+      <div class="fields checks">
+        <div class="field">
+          <label for="fAprov">Aprovação automática?</label>
+          <select id="fAprov"><option value="">Selecione</option><option>Sim</option><option>Não</option></select>
+        </div>
+        <div class="field">
+          <label for="fVeicLoja">Veículo compatível com a loja?</label>
+          <select id="fVeicLoja"><option value="">Selecione</option><option>Sim</option><option>Não</option></select>
+        </div>
+        <div class="field">
+          <label for="fRecorr">Loja de recorrência?</label>
+          <select id="fRecorr"><option value="">Selecione</option><option>Sim</option><option>Não</option></select>
+        </div>
       </div>
     </div>
 
@@ -669,6 +694,7 @@
     sigInfo = null;
     $('riskResult').classList.remove('show');
     fields.parecer.value = ''; riscoPontos = 0; atualizarParecer();
+    ['fAprov', 'fVeicLoja', 'fRecorr'].forEach(function (id) { $(id).value = ''; });
     setRiskStatus('');
     setStatus('Lendo o PDF…');
     $('result').classList.remove('show');
@@ -1432,6 +1458,9 @@
       linhas.push(['Análise de risco', r.pontos + ' / 100, nível de alerta ' + r.nivel + (sin.length ? '. ' + sin.join('; ') : '. Nenhum sinal de alerta.'),
         fr ? { cor: corEmail(fr) } : null]);
     }
+    [['Aprovação automática', 'fAprov'], ['Veículo compatível com a loja', 'fVeicLoja'], ['Loja de recorrência', 'fRecorr']].forEach(function (c) {
+      linhas.push([c[0], $(c[1]).value || 'Não informado']);
+    });
     if (riscoPontos > 0 && fields.parecer.value.trim()) linhas.unshift(['Parecer do GCM', fields.parecer.value.trim()]);
     var td = 'border:1px solid #cde3d3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:14px;';
     var tit = 'Dados da proposta' + (fields.proposta.value ? ' ' + esc(fields.proposta.value) : '');
@@ -1504,6 +1533,7 @@
     $('lrResult').classList.remove('show');
     $('riskResult').classList.remove('show');
     fields.parecer.value = ''; riscoPontos = 0; atualizarParecer();
+    ['fAprov', 'fVeicLoja', 'fRecorr'].forEach(function (id) { $(id).value = ''; });
     setRiskStatus('');
     setLrStatus('');
     setStatus('');
