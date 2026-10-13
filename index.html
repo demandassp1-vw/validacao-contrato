@@ -296,6 +296,7 @@
     </div>
 
     <div class="actions">
+      <button type="button" id="googleBtn">Pesq. Google</button>
       <button type="button" id="copy">Copiar resumo</button>
       <button type="button" class="ghost" id="reset">Ler outro PDF</button>
     </div>
@@ -1210,6 +1211,33 @@
     setRiskStatus('');
   }
 
+
+  /* Pesq. Google: copia "Nome completo" "Cidade" e abre a busca no Google */
+  function copiarTexto(txt) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(txt);
+    return new Promise(function (res, rej) {
+      var ta = document.createElement('textarea');
+      ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { /* sem cópia */ }
+      document.body.removeChild(ta);
+      ok ? res() : rej(new Error('copy'));
+    });
+  }
+  function pesquisarGoogle() {
+    var nome = fields.nome.value.trim().replace(/\s+/g, ' ');
+    var cidade = fields.cidade.value.trim().replace(/\s+/g, ' ');
+    var btn = $('googleBtn');
+    if (!nome) { setStatus('Preencha o nome do cliente para pesquisar.', true); return; }
+    var q = '"' + nome + '"' + (cidade ? ' "' + cidade + '"' : '');
+    var p = copiarTexto(q);
+    window.open('https://www.google.com/search?q=' + encodeURIComponent(q), '_blank', 'noopener');
+    var texto = 'Pesq. Google';
+    p.then(function () { btn.textContent = 'Copiado'; }, function () { btn.textContent = 'Pesquisa aberta'; })
+      .then(function () { setTimeout(function () { btn.textContent = texto; }, 2000); });
+  }
+
   /* ---------- eventos ---------- */
   var drop = $('drop');
   $('file').addEventListener('change', function (e) { handleFile(e.target.files[0]); });
@@ -1238,6 +1266,7 @@
   });
   $('compareLR').addEventListener('click', function () { enqueue(compareLojaResidencia); });
   $('riskBtn').addEventListener('click', analisarRisco);
+  $('googleBtn').addEventListener('click', pesquisarGoogle);
   ['email', 'emailAssin', 'cidade'].forEach(function (k) { fields[k].addEventListener('input', atualizarAlertas); });
 
   $('copy').addEventListener('click', function () {
