@@ -62,6 +62,10 @@
   .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
   .legend b { color: var(--ink); font-weight: 600; }
 
+  .row1 { display: grid; grid-template-columns: minmax(0, 1fr) 105px 78px 112px; gap: 8px 12px; margin-bottom: 8px; }
+  .nome-wrap { display: flex; gap: 6px; align-items: stretch; }
+  .nome-wrap input { flex: 1; min-width: 0; }
+  button.mini { padding: 4px 8px; font-size: .75rem; white-space: nowrap; }
   .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 12px; }
   .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   .field.s2 { grid-column: span 2; }
@@ -123,6 +127,8 @@
 
   @media (max-width: 700px) {
     .fields { grid-template-columns: repeat(2, 1fr); }
+    .row1 { grid-template-columns: 1fr 1fr; }
+    .row1 .field:first-child { grid-column: 1 / -1; }
   }
   @media (max-width: 480px) {
     .fields { grid-template-columns: 1fr; }
@@ -164,13 +170,16 @@
 
     <div class="entry">
       <h2>Dados do cliente e do veículo</h2>
-      <div class="fields">
-        <div class="field s2">
+      <div class="row1">
+        <div class="field">
           <label for="fNome">Nome</label>
-          <input id="fNome" type="text" autocomplete="off">
+          <div class="nome-wrap">
+            <input id="fNome" type="text" autocomplete="off">
+            <button type="button" class="ghost mini" id="googleBtn" title="Copia &quot;Nome&quot; &quot;Cidade&quot; e abre a busca no Google">Pesq. Google</button>
+          </div>
         </div>
         <div class="field">
-          <label for="fNasc">Data de nascimento</label>
+          <label for="fNasc">Nascimento</label>
           <input id="fNasc" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off">
         </div>
         <div class="field">
@@ -178,6 +187,12 @@
           <input id="fIdade" type="text" readonly>
           <span class="hint" id="hIdade"></span>
         </div>
+        <div class="field">
+          <label for="fProposta">Nº da proposta</label>
+          <input id="fProposta" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+      </div>
+      <div class="fields">
         <div class="field s2">
           <label for="fEmail">E-mail</label>
           <input id="fEmail" type="text" autocomplete="off">
@@ -296,8 +311,7 @@
     </div>
 
     <div class="actions">
-      <button type="button" id="googleBtn">Pesq. Google</button>
-      <button type="button" id="copy">Copiar resumo</button>
+      <button type="button" id="mailBtn">E-mail De Acordo</button>
       <button type="button" class="ghost" id="reset">Ler outro PDF</button>
     </div>
   </section>
@@ -433,7 +447,23 @@
     var orc = find(/OR[ÇC]AMENTO DE OPERA[ÇC][ÃA]O DE CR[ÉE]DITO/i);
     var fText = ficha ? ficha.text : all;
 
-    var out = { nome: '', nasc: '', cep: '', email: '', endereco: '', bairro: '', cidade: '', uf: '', loja: '', cnpjLoja: '', veiculo: '', marca: '', ano: '', valorVeic: null, entrada: null };
+    var out = { proposta: '', nome: '', nasc: '', cep: '', email: '', endereco: '', bairro: '', cidade: '', uf: '', loja: '', cnpjLoja: '', veiculo: '', marca: '', ano: '', valorVeic: null, entrada: null };
+
+    /* Número da proposta: aparece no topo da CCB ("Nº 15738621"), no orçamento
+       ("ORÇAMENTO Nº 3220635/15738621") e no rodapé de cada folha ("15738621 V.003").
+       Junta as três leituras e fica com o número que mais se repete. */
+    var cands = [];
+    var mp = all.match(/C[ÉE]DULA DE CR[ÉE]DITO BANC[ÁA]RIO\s+N\S{0,2}\s*(\d{6,12})\b/i);
+    if (mp) cands.push(mp[1]);
+    mp = all.match(/OR[ÇC]AMENTO N\S{0,2}\s*\d+\s*\/\s*(\d{6,12})\b/i);
+    if (mp) cands.push(mp[1]);
+    var rod = all.match(/\b\d{6,12}\s+V\.\d{3}\b/g);
+    if (rod) rod.forEach(function (x) { cands.push(x.match(/\d+/)[0]); });
+    if (cands.length) {
+      var cont = {};
+      cands.forEach(function (c) { cont[c] = (cont[c] || 0) + 1; });
+      out.proposta = cands.slice().sort(function (a, b) { return cont[b] - cont[a]; })[0];
+    }
 
     /* Ficha cadastral */
     var m = fText.match(new RegExp('\\b\\d{11}\\s+([' + NAME_CHARS + "][" + NAME_CHARS + "' ]{4,}?)\\s+\\d{5,}"));
@@ -530,7 +560,7 @@
 
   /* ---------- tela ---------- */
   var fields = {
-    nome: $('fNome'), nasc: $('fNasc'), idade: $('fIdade'), cep: $('fCep'),
+    nome: $('fNome'), nasc: $('fNasc'), idade: $('fIdade'), proposta: $('fProposta'), cep: $('fCep'),
     email: $('fEmail'), veiculo: $('fVeiculo'), valorVeic: $('fValorVeic'), entrada: $('fEntrada'),
     endereco: $('fEnd'), bairro: $('fBairro'), cidade: $('fCidade'), uf: $('fUf'),
     lat: $('fLat'), lon: $('fLon'), loja: $('fLoja'), cnpj: $('fCnpj'), emailAssin: $('fEmailAssin')
@@ -578,7 +608,7 @@
   }
 
   function markMissing() {
-    ['nome', 'nasc', 'cep', 'email', 'endereco', 'veiculo', 'valorVeic', 'entrada'].forEach(function (k) {
+    ['nome', 'nasc', 'proposta', 'cep', 'email', 'endereco', 'veiculo', 'valorVeic', 'entrada'].forEach(function (k) {
       fields[k].classList.toggle('missing', !fields[k].value.trim());
     });
   }
@@ -586,6 +616,7 @@
   function fill(d) {
     fields.nome.value = d.nome ? titleCase(d.nome) : '';
     fields.nasc.value = d.nasc;
+    fields.proposta.value = d.proposta || '';
     fields.cep.value = d.cep;
     fields.email.value = d.email;
     fields.endereco.value = d.endereco;
@@ -599,7 +630,7 @@
     fields.valorVeic.value = d.valorVeic != null ? plain(d.valorVeic) : '';
     fields.entrada.value = d.entrada != null ? plain(d.entrada) : '';
     recalc();
-    var faltando = ['nome', 'nasc', 'cep', 'email', 'endereco', 'veiculo', 'valorVeic', 'entrada']
+    var faltando = ['nome', 'nasc', 'proposta', 'cep', 'email', 'endereco', 'veiculo', 'valorVeic', 'entrada']
       .filter(function (k) { return !fields[k].value.trim(); });
     if (faltando.length) {
       setStatus('Alguns campos não foram encontrados. Eles estão destacados para você preencher.', true);
@@ -1269,31 +1300,86 @@
   $('googleBtn').addEventListener('click', pesquisarGoogle);
   ['email', 'emailAssin', 'cidade'].forEach(function (k) { fields[k].addEventListener('input', atualizarAlertas); });
 
-  $('copy').addEventListener('click', function () {
+  /* ---------- E-mail De Acordo ---------- */
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function montarResumo() {
     var vv = toNum(fields.valorVeic.value);
     var en = toNum(fields.entrada.value);
+    var pctEnt = vv && en != null && vv > 0 ? en / vv * 100 : null;
+    var end = fields.endereco.value + (fields.bairro.value ? ', ' + fields.bairro.value : '') +
+      (fields.cidade.value ? ', ' + fields.cidade.value : '') + (fields.uf.value ? '/' + fields.uf.value : '');
     var linhas = [
-      'Cliente: ' + fields.nome.value,
-      'Idade: ' + fields.idade.value,
-      'Endereço: ' + fields.endereco.value + (fields.bairro.value ? ', ' + fields.bairro.value : '') + (fields.cidade.value ? ', ' + fields.cidade.value : '') + '/' + fields.uf.value,
-      'CEP: ' + fields.cep.value,
-      'E-mail: ' + fields.email.value,
-      'Veículo: ' + fields.veiculo.value,
-      'Entrada: ' + ((vv && en != null) ? pctFmt(en / vv * 100) + ' (' + brl(en) + ' de ' + brl(vv) + ')' : '')
+      ['Proposta', fields.proposta.value],
+      ['Cliente', fields.nome.value],
+      ['Idade', fields.idade.value],
+      ['Endereço', end],
+      ['CEP', fields.cep.value],
+      ['E-mail do cadastro', fields.email.value]
     ];
+    if (fields.emailAssin.value) linhas.push(['E-mail da assinatura', fields.emailAssin.value]);
+    linhas.push(['Veículo', fields.veiculo.value]);
+    linhas.push(['Valor do veículo', vv ? brl(vv) : '']);
+    linhas.push(['Entrada', en != null ? brl(en) + (pctEnt != null ? ' (' + pctFmt(pctEnt) + ' do veículo)' : '') : '']);
+    linhas.push(['Loja', fields.loja.value + (fields.cnpj.value ? ' - CNPJ ' + fields.cnpj.value : '')]);
     if ($('lrResult').classList.contains('show')) {
-      linhas.push('Loja x residência: ' + $('lrDist').textContent + ' (' + $('lrVerdict').textContent + ')');
+      linhas.push(['Loja x residência', $('lrDist').textContent + ' (' + $('lrVerdict').textContent + ')']);
     }
     if ($('geoResult').classList.contains('show')) {
-      linhas.push('Assinatura: ' + $('gDist').textContent + ' (' + $('gVerdict').textContent + ')');
+      linhas.push(['Local da assinatura', $('gDist').textContent + ' (' + $('gVerdict').textContent + ')']);
     }
-    var txt = linhas.join('\n');
-    var done = function () { setStatus('Resumo copiado.'); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(txt).then(done, function () { setStatus('Não foi possível copiar. Selecione e copie os campos manualmente.', true); });
-    } else {
-      setStatus('Seu navegador não permite copiar automaticamente.', true);
+    if (fields.nome.value.trim()) {
+      var r = sinaisLocais();
+      var sin = r.sinais.filter(function (x) { return x.pontos > 0; }).map(function (x) { return x.texto; });
+      linhas.push(['Análise de risco', r.pontos + ' / 100, nível de alerta ' + r.nivel + (sin.length ? '. ' + sin.join('; ') : '. Nenhum sinal de alerta.')]);
     }
+    var td = 'border:1px solid #cde3d3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:14px;';
+    var html = '<table style="border-collapse:collapse;border:1px solid #cde3d3;">' +
+      '<tr><td colspan="2" style="' + td + 'background:#14532d;color:#ffffff;font-weight:bold;">Dados da proposta' +
+      (fields.proposta.value ? ' ' + esc(fields.proposta.value) : '') + '</td></tr>' +
+      linhas.map(function (l) {
+        return '<tr><td style="' + td + 'background:#e3f3e8;font-weight:bold;white-space:nowrap;">' + esc(l[0]) +
+          '</td><td style="' + td + '">' + esc(l[1]) + '</td></tr>';
+      }).join('') + '</table>';
+    var texto = linhas.map(function (l) { return l[0] + ': ' + l[1]; }).join('\n');
+    return { html: html, texto: texto };
+  }
+  function copiarHtml(html, texto) {
+    if (navigator.clipboard && window.ClipboardItem && navigator.clipboard.write) {
+      return navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([texto], { type: 'text/plain' })
+      })]);
+    }
+    return new Promise(function (res, rej) {
+      var div = document.createElement('div');
+      div.contentEditable = 'true';
+      div.style.cssText = 'position:fixed;left:-9999px;top:0;';
+      div.innerHTML = html;
+      document.body.appendChild(div);
+      var sel = window.getSelection(), rg = document.createRange();
+      rg.selectNodeContents(div); sel.removeAllRanges(); sel.addRange(rg);
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { /* sem cópia */ }
+      sel.removeAllRanges(); document.body.removeChild(div);
+      ok ? res() : rej(new Error('copy'));
+    });
+  }
+  $('mailBtn').addEventListener('click', function () {
+    var prop = fields.proposta.value.trim();
+    var loja = fields.loja.value.trim();
+    var assunto = 'De Acordo - Pagamento da proposta ' + prop + ' - loja ' + loja;
+    var corpo = 'Prezado(a) Gestor(a),\r\n\r\n' +
+      'Solicito de acordo para seguir com esse pagamento, abaixo os principais dados da proposta que foram analisados.\r\n\r\n';
+    var resumo = montarResumo();
+    var abrir = function (copiou) {
+      setStatus(copiou
+        ? 'Dados copiados. No e-mail, clique no corpo (abaixo do texto) e use Ctrl+V para colar a tabela.'
+        : 'Não consegui copiar os dados automaticamente. O e-mail foi aberto sem a tabela.', !copiou);
+      window.location.href = 'mailto:?subject=' + encodeURIComponent(assunto) + '&body=' + encodeURIComponent(corpo);
+    };
+    copiarHtml(resumo.html, resumo.texto).then(function () { abrir(true); }, function () { abrir(false); });
   });
 
   $('reset').addEventListener('click', function () {
