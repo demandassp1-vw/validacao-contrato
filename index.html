@@ -1391,7 +1391,7 @@
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   /* No e-mail não se usa fundo escuro: ao colar com "Mesclar formatação" o Outlook descarta a cor da fonte */
-  function corEmail(n) { return n === 4 ? { bg: '#f28b82', fg: '#4a0a06' } : FAIXAS[n]; }
+  function corEmail(n) { return n === 4 ? { bg: '#f7aaa3', fg: '#4a0a06' } : FAIXAS[n]; }
   function montarResumo() {
     atualizarAlertas();
     var temAlerta = function (inp) { return inp.closest('.field').classList.contains('alerta'); };
