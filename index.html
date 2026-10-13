@@ -3,160 +3,128 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Leitor de CCB</title>
+<title>Leitor de Contrato</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --paper: #eceeed;
+    color-scheme: light;
+    --paper: #ffffff;
     --panel: #ffffff;
-    --ink: #17302e;
-    --muted: #5b6e6b;
-    --line: #cfd8d6;
-    --teal: #0a6b66;
-    --teal-soft: #cfe5e2;
+    --ink: #14291d;
+    --muted: #4f6b58;
+    --line: #cde3d3;
+    --verde-escuro: #14532d;
+    --verde-escuro-hover: #0e3d21;
+    --verde-claro: #e3f3e8;
+    --verde-medio: #a9d6b7;
     --warn: #8a4b00;
     --danger: #a3261d;
     --font: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --paper: #0f1a19;
-      --panel: #162422;
-      --ink: #e4efed;
-      --muted: #94aaa6;
-      --line: #2b3f3c;
-      --teal: #4fc2b8;
-      --teal-soft: #1f3a37;
-      --warn: #f0b36b;
-      --danger: #ff8d82;
-    }
-  }
   * { box-sizing: border-box; }
-  html { background: var(--paper); }
-  body {
-    margin: 0;
-    font-family: var(--font);
-    color: var(--ink);
-    background: var(--paper);
-    line-height: 1.5;
-    min-height: 100vh;
-  }
-  main { max-width: 760px; margin: 0 auto; padding: 40px 20px 64px; }
-  h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 6px; }
-  .lede { color: var(--muted); margin: 0 0 28px; max-width: 60ch; }
+  html { background: var(--paper); font-size: 15px; }
+  body { margin: 0; font-family: var(--font); color: var(--ink); background: var(--paper); line-height: 1.45; min-height: 100vh; }
+  .topo { background: var(--verde-escuro); border-bottom: 4px solid var(--verde-medio); }
+  .topo-in { max-width: 900px; margin: 0 auto; padding: 12px 20px; }
+  h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.01em; margin: 0; color: #fff; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px 20px 40px; }
 
   .drop {
-    display: block;
-    border: 2px dashed var(--line);
-    border-radius: 6px;
-    background: var(--panel);
-    padding: 34px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color .15s, background .15s;
+    display: block; border: 2px dashed var(--verde-medio); border-radius: 6px; background: #f6fbf8;
+    padding: 14px 16px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
   }
-  .drop:hover, .drop.over { border-color: var(--teal); background: var(--teal-soft); }
-  .drop:focus-within { outline: 3px solid var(--teal); outline-offset: 2px; }
-  .drop strong { display: block; font-size: 1.05rem; }
-  .drop span { color: var(--muted); font-size: .92rem; }
+  .drop:hover, .drop.over { border-color: var(--verde-escuro); background: var(--verde-claro); }
+  .drop:focus-within { outline: 3px solid var(--verde-escuro); outline-offset: 2px; }
+  .drop strong { display: block; font-size: .95rem; }
+  .drop span { color: var(--muted); font-size: .8rem; }
   .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 
-  #status { min-height: 1.5em; margin: 14px 0 0; font-size: .95rem; color: var(--muted); }
+  #status { min-height: 1.2em; margin: 8px 0 0; font-size: .85rem; color: var(--muted); }
   #status.error { color: var(--danger); }
-
-  #result { display: none; margin-top: 28px; }
+  #result { display: none; margin-top: 10px; }
   #result.show { display: block; }
 
-  .entry {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 22px 22px 20px;
-    margin-bottom: 20px;
+  .entry { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
+  .entry h2 {
+    font-size: .8rem; font-weight: 700; color: var(--verde-escuro);
+    margin: -12px -14px 10px; padding: 6px 14px;
+    background: var(--verde-claro); border-bottom: 1px solid var(--line); border-radius: 5px 5px 0 0;
   }
-  .entry h2 { font-size: .95rem; font-weight: 600; color: var(--muted); margin: 0 0 12px; }
-  .split-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .pct { font-size: 3rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--teal); }
-  .pct small { font-size: 1rem; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
-  .bar {
-    display: flex; height: 22px; margin: 16px 0 8px;
-    border-radius: 3px; overflow: hidden; border: 1px solid var(--line);
-  }
-  .bar .in { background: var(--teal); transition: width .4s ease; }
-  .bar .fin {
-    flex: 1;
-    background: repeating-linear-gradient(135deg, var(--teal-soft) 0 6px, transparent 6px 12px);
-  }
-  .legend { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: .9rem; color: var(--muted); }
+
+  .split-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .pct { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: var(--verde-escuro); }
+  .bar { display: flex; height: 10px; margin: 8px 0 6px; border-radius: 3px; overflow: hidden; border: 1px solid var(--line); }
+  .bar .in { background: var(--verde-escuro); transition: width .4s ease; }
+  .bar .fin { flex: 1; background: repeating-linear-gradient(135deg, var(--verde-claro) 0 5px, transparent 5px 10px); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
   .legend b { color: var(--ink); font-weight: 600; }
 
-  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; }
-  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-  .field.wide { grid-column: 1 / -1; }
-  .field label { font-size: .85rem; font-weight: 600; }
-  .field input, .field select {
-    font: inherit; color: var(--ink); background: transparent;
-    border: 1px solid var(--line); border-radius: 4px; padding: 9px 10px; width: 100%;
+  .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 12px; }
+  .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .field.s2 { grid-column: span 2; }
+  .field label { font-size: .72rem; font-weight: 600; color: var(--muted); }
+  .field input {
+    font: inherit; font-size: .88rem; color: var(--ink); background: #fff;
+    border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 100%;
   }
-  .field input:focus-visible, .field select:focus-visible { outline: 3px solid var(--teal); outline-offset: 1px; border-color: var(--teal); }
+  .field input:focus-visible { outline: 2px solid var(--verde-escuro); outline-offset: 1px; border-color: var(--verde-escuro); }
   .field input.missing { border-color: var(--warn); }
-  .hint { font-size: .82rem; color: var(--muted); min-height: 1.2em; }
+  .field input[readonly] { background: #f6fbf8; }
+  .hint { font-size: .72rem; color: var(--muted); }
   .hint.warn { color: var(--warn); }
 
-  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
   button {
-    font: inherit; font-weight: 600; cursor: pointer;
-    border-radius: 4px; padding: 10px 16px; border: 1px solid var(--teal);
-    background: var(--teal); color: #fff;
+    font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer;
+    border-radius: 4px; padding: 6px 12px; border: 1px solid var(--verde-escuro);
+    background: var(--verde-escuro); color: #fff;
   }
-  @media (prefers-color-scheme: dark) { button { color: #08201e; } }
-  button.ghost { background: transparent; color: var(--teal); }
-  button:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
-
-  .geo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; margin-bottom: 14px; }
-  .geo-result { display: none; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
-  .geo-result.show { display: block; }
-  .dist { font-size: 2.4rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
-  .verdict { font-weight: 600; margin: 4px 0 12px; }
-  .verdict.near { color: var(--teal); }
-  .verdict.mid, .verdict.warn { color: var(--warn); }
-  .verdict.far { color: var(--danger); }
-  .kv { margin: 0 0 10px; font-size: .92rem; }
-  .kv dt { font-weight: 600; }
-  .kv dd { margin: 0 0 8px; color: var(--muted); overflow-wrap: anywhere; }
-  .geo-links { display: flex; gap: 16px; flex-wrap: wrap; font-size: .9rem; }
-  .geo-links a { color: var(--teal); }
-  .geo-note { font-size: .82rem; color: var(--muted); margin: 12px 0 0; max-width: 62ch; }
-  .choice { display: flex; gap: 18px; flex-wrap: wrap; margin: 0 0 14px; border: 0; padding: 0; }
-  .choice legend { font-size: .85rem; font-weight: 600; padding: 0; margin-bottom: 6px; }
-  .choice label { display: inline-flex; align-items: center; gap: 7px; font-size: .95rem; cursor: pointer; }
-  .choice input { accent-color: var(--teal); width: 1.05rem; height: 1.05rem; }
-  #iaStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
-  #iaStatus.error { color: var(--danger); }
-  .ia-warn { font-size: .88rem; color: var(--warn); margin: 0 0 12px; }
-  .ia-sec { margin: 0 0 14px; }
-  .ia-sec h3 { font-size: .85rem; font-weight: 600; margin: 0 0 4px; }
-  .ia-sec p, .ia-sec li { font-size: .92rem; margin: 0 0 4px; overflow-wrap: anywhere; }
-  .ia-sec ul { margin: 0; padding-left: 18px; }
-  .ia-sec .conf { color: var(--muted); font-size: .82rem; }
-  .ia-sec a { color: var(--teal); }
-  #riskStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
-  #riskStatus.error { color: var(--danger); }
-  .risk-sep { border-top: 1px solid var(--line); margin: 16px 0 14px; }
-  #lrStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
-  #lrStatus.error { color: var(--danger); }
-  #geoStatus { min-height: 1.3em; font-size: .9rem; color: var(--muted); margin: 0 0 10px; }
-  #geoStatus.error { color: var(--danger); }
+  button:hover:not(:disabled) { background: var(--verde-escuro-hover); border-color: var(--verde-escuro-hover); }
+  button.ghost { background: transparent; color: var(--verde-escuro); }
+  button.ghost:hover:not(:disabled) { background: var(--verde-claro); color: var(--verde-escuro); }
+  button:focus-visible { outline: 3px solid var(--verde-escuro); outline-offset: 2px; }
   button:disabled { opacity: .55; cursor: progress; }
 
-  .privacy { margin-top: 28px; font-size: .85rem; color: var(--muted); max-width: 62ch; }
+  .geo-grid { display: grid; grid-template-columns: 150px 150px; gap: 8px 12px; margin-bottom: 8px; }
+  .choice { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 8px; border: 0; padding: 0; }
+  .choice legend { font-size: .72rem; font-weight: 600; color: var(--muted); padding: 0; margin-bottom: 3px; }
+  .choice label { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
+  .choice input { accent-color: var(--verde-escuro); width: 1rem; height: 1rem; }
+  #geoStatus, #lrStatus, #riskStatus { min-height: 0; font-size: .8rem; color: var(--muted); margin: 0 0 6px; }
+  #geoStatus:empty, #lrStatus:empty, #riskStatus:empty { display: none; }
+  #geoStatus.error, #lrStatus.error, #riskStatus.error { color: var(--danger); }
 
-  @media (max-width: 560px) {
-    .fields, .geo-grid { grid-template-columns: 1fr; }
-    .pct { font-size: 2.4rem; }
+  .geo-result { display: none; margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .geo-result.show { display: block; }
+  .res-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .dist { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
+  .verdict { font-weight: 600; font-size: .85rem; margin: 0; }
+  .verdict.near { color: var(--verde-escuro); }
+  .verdict.mid, .verdict.warn { color: var(--warn); }
+  .verdict.far { color: var(--danger); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 6px; font-size: .8rem; }
+  .kv dt { font-weight: 600; }
+  .kv dd { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+  .geo-links { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; }
+  .geo-links a { color: var(--verde-escuro); }
+
+  .ia-warn { font-size: .78rem; color: var(--muted); margin: 0 0 6px; }
+  .ia-sec { margin: 0 0 6px; }
+  .ia-sec h3 { font-size: .75rem; font-weight: 600; margin: 0 0 2px; }
+  .ia-sec p, .ia-sec li { font-size: .82rem; margin: 0 0 2px; overflow-wrap: anywhere; }
+  .ia-sec ul { margin: 0; padding-left: 16px; }
+  .ia-sec .conf { color: var(--muted); font-size: .75rem; }
+
+  @media (max-width: 700px) {
+    .fields { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .fields { grid-template-columns: 1fr; }
+    .field.s2 { grid-column: auto; }
+    .geo-grid { grid-template-columns: 1fr 1fr; }
   }
   @media (prefers-reduced-motion: reduce) {
     .bar .in, .drop { transition: none; }
@@ -164,10 +132,8 @@
 </style>
 </head>
 <body>
+<header class="topo"><div class="topo-in"><h1>Leitor de Contrato</h1></div></header>
 <main>
-  <h1>Leitor de CCB</h1>
-  <p class="lede">Envie o PDF completo da Cédula de Crédito Bancário. A página lê a Ficha Cadastral e a CCB e mostra os dados do cliente, o veículo e quanto foi dado de entrada.</p>
-
   <label class="drop" id="drop">
     <input type="file" id="file" accept="application/pdf,.pdf">
     <strong>Escolha o PDF ou arraste até aqui</strong>
@@ -195,7 +161,7 @@
     <div class="entry">
       <h2>Dados do cliente e do veículo</h2>
       <div class="fields">
-        <div class="field wide">
+        <div class="field s2">
           <label for="fNome">Nome</label>
           <input id="fNome" type="text" autocomplete="off">
         </div>
@@ -208,12 +174,20 @@
           <input id="fIdade" type="text" readonly>
           <span class="hint" id="hIdade"></span>
         </div>
-        <div class="field wide">
+        <div class="field s2">
           <label for="fEmail">E-mail</label>
           <input id="fEmail" type="text" autocomplete="off">
         </div>
-        <div class="field wide">
-          <label for="fEnd">Endereço do cadastro (rua e número)</label>
+        <div class="field">
+          <label for="fCep">CEP</label>
+          <input id="fCep" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fUf">UF</label>
+          <input id="fUf" type="text" maxlength="2" autocomplete="off">
+        </div>
+        <div class="field s2">
+          <label for="fEnd">Endereço (rua e número)</label>
           <input id="fEnd" type="text" autocomplete="off">
         </div>
         <div class="field">
@@ -224,15 +198,7 @@
           <label for="fCidade">Cidade</label>
           <input id="fCidade" type="text" autocomplete="off">
         </div>
-        <div class="field">
-          <label for="fCep">CEP da residência</label>
-          <input id="fCep" type="text" inputmode="numeric" autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="fUf">UF</label>
-          <input id="fUf" type="text" maxlength="2" autocomplete="off">
-        </div>
-        <div class="field wide">
+        <div class="field s2">
           <label for="fVeiculo">Veículo (modelo)</label>
           <input id="fVeiculo" type="text" autocomplete="off">
           <span class="hint" id="hVeiculo"></span>
@@ -245,7 +211,7 @@
           <label for="fEntrada">Valor da entrada (R$)</label>
           <input id="fEntrada" type="text" inputmode="decimal" autocomplete="off">
         </div>
-        <div class="field">
+        <div class="field s2">
           <label for="fLoja">Loja (concessionária / revenda)</label>
           <input id="fLoja" type="text" autocomplete="off">
         </div>
@@ -269,13 +235,6 @@
           <label for="fPrazo">Prazo (meses)</label>
           <input id="fPrazo" type="text" inputmode="numeric" autocomplete="off">
         </div>
-        <div class="field">
-          <label for="fTipoLoja">Tipo da loja</label>
-          <select id="fTipoLoja">
-            <option value="multimarcas">Multimarcas (revenda)</option>
-            <option value="concessionaria">Concessionária (marca)</option>
-          </select>
-        </div>
       </div>
     </div>
 
@@ -292,11 +251,6 @@
           <input id="fLon" type="text" inputmode="decimal" autocomplete="off">
         </div>
       </div>
-      <div class="field" style="margin-bottom:14px">
-        <label for="fAssEmail">E-mail da assinatura digital</label>
-        <input id="fAssEmail" type="text" autocomplete="off">
-        <span class="hint" id="hAssEmail">Lido do PDF quando possível. Confira e corrija se precisar; é usado na análise de risco.</span>
-      </div>
       <fieldset class="choice">
         <legend>Comparar o local da assinatura com</legend>
         <label><input type="radio" name="alvo" value="loja" checked> Endereço da loja (pelo CNPJ)</label>
@@ -306,8 +260,7 @@
         <button type="button" id="compare">Recalcular</button>
       </div>
       <div class="geo-result" id="geoResult">
-        <div class="dist" id="gDist">–</div>
-        <div class="verdict" id="gVerdict"></div>
+        <div class="res-head"><div class="dist" id="gDist">–</div><div class="verdict" id="gVerdict"></div></div>
         <dl class="kv">
           <dt>Local da assinatura (aproximado)</dt>
           <dd id="gSign">–</dd>
@@ -328,8 +281,7 @@
         <button type="button" id="compareLR">Recalcular distância</button>
       </div>
       <div class="geo-result" id="lrResult">
-        <div class="dist" id="lrDist">–</div>
-        <div class="verdict" id="lrVerdict"></div>
+        <div class="res-head"><div class="dist" id="lrDist">–</div><div class="verdict" id="lrVerdict"></div></div>
         <dl class="kv">
           <dt id="lrLojaLabel">Endereço da loja</dt>
           <dd id="lrLoja">–</dd>
@@ -344,19 +296,10 @@
     </div>
 
     <div class="entry">
-      <h2>Análise do nome com IA</h2>
-      <p id="iaStatus" role="status" aria-live="polite"></p>
-      <div class="actions">
-        <button type="button" id="iaBtn">Analisar nome com IA</button>
-      </div>
-      <div class="geo-result" id="iaResult"></div>
-    </div>
-
-    <div class="entry">
       <h2>Análise de risco da operação</h2>
       <p id="riskStatus" role="status" aria-live="polite"></p>
       <div class="actions">
-        <button type="button" id="riskBtn">Analisar risco da operação</button>
+        <button type="button" id="riskBtn">Recalcular</button>
       </div>
       <div class="geo-result" id="riskResult"></div>
     </div>
@@ -367,7 +310,7 @@
     </div>
   </section>
 
-  <p class="privacy">O PDF é lido no seu navegador. Ao carregar um contrato, a página consulta ViaCEP, BrasilAPI e serviços de mapa (OpenStreetMap e OpenCage) enviando CEP, CNPJ da loja, rua, cidade e coordenadas. O nome só é enviado à IA quando você clica em "Analisar nome com IA".</p>
+
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -612,8 +555,7 @@
     email: $('fEmail'), veiculo: $('fVeiculo'), valorVeic: $('fValorVeic'), entrada: $('fEntrada'),
     endereco: $('fEnd'), bairro: $('fBairro'), cidade: $('fCidade'), uf: $('fUf'),
     lat: $('fLat'), lon: $('fLon'), loja: $('fLoja'), cnpj: $('fCnpj'),
-    prof: $('fProf'), renda: $('fRenda'), parcela: $('fParcela'), prazo: $('fPrazo'),
-    assEmail: $('fAssEmail'), tipoLoja: $('fTipoLoja')
+    prof: $('fProf'), renda: $('fRenda'), parcela: $('fParcela'), prazo: $('fPrazo')
   };
   var dadosPdf = {};
   var sigInfo = null;
@@ -703,7 +645,7 @@
       setStatus('Esse arquivo não é um PDF. Escolha o PDF da CCB.', true);
       return;
     }
-    geoRes = { assin: {}, lr: null, lojaCidade: '', resCidade: '' };
+    geoRes = { assin: {}, lr: null, lojaCidade: '' };
     sigInfo = null;
     $('riskResult').classList.remove('show');
     setRiskStatus('');
@@ -721,6 +663,7 @@
       enqueue(compareLojaResidencia);
       detectSignature(pages).then(function (temCoord) {
         if (temCoord) enqueue(compare);
+        enqueue(analisarRisco);
       });
     } catch (e) {
       console.error(e);
@@ -765,12 +708,7 @@
     if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
     var dt = text.match(/Data:\s*(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})/);
     var dev = text.match(/Dispositivo:\s*([A-Za-z]+)/);
-    /* e-mail do signatário: procura perto das coordenadas, de preferência depois da palavra "E-mail" */
-    var janela = text.slice(Math.max(0, m.index - 400), m.index + m[0].length + 400);
-    var em = janela.match(/E-?mail\s*:?\s*([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})/i) ||
-             janela.match(/([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})/i);
-    return { lat: lat, lon: lon, data: dt ? dt[1] + ' ' + dt[2] : '', disp: dev ? dev[1] : '',
-      email: em ? em[1].toLowerCase() : '' };
+    return { lat: lat, lon: lon, data: dt ? dt[1] + ' ' + dt[2] : '', disp: dev ? dev[1] : '' };
   }
 
   async function renderPageCanvas(pageNum, scale) {
@@ -787,7 +725,6 @@
   async function detectSignature(pages) {
     $('geoResult').classList.remove('show');
     fields.lat.value = ''; fields.lon.value = '';
-    fields.assEmail.value = '';
     var found = parseSignature(pages.map(function (p) { return p.text; }).join(' '));
     if (!found) {
       /* Na maioria dos PDFs a página de assinaturas é uma imagem: lê por OCR */
@@ -815,8 +752,6 @@
     sigInfo = found;
     fields.lat.value = String(found.lat);
     fields.lon.value = String(found.lon);
-    fields.assEmail.value = found.email || '';
-    $('hAssEmail').textContent = found.email ? 'Lido do PDF. Confira se é mesmo o e-mail do cliente.' : 'Não encontrei o e-mail na assinatura. Digite se quiser que ele entre na análise.';
     var extra = [];
     if (found.data) extra.push('assinado em ' + found.data);
     if (found.disp) extra.push('dispositivo: ' + found.disp);
@@ -1126,7 +1061,6 @@
       var km = haversineKm(la, lo, ra, ro);
       geoRes.lr = { km: km, nivelLoja: gl.nivel, nivelRes: gr.nivel };
       geoRes.lojaCidade = loja.cidade || '';
-      geoRes.resCidade = res.cidade || '';
 
       var cls, txt;
       if (km <= 5) { cls = 'near'; txt = 'Loja perto da residência do cliente'; }
@@ -1161,12 +1095,15 @@
   }
 
 
-  /* ---------- análise do nome com IA ---------- */
-  function setIaStatus(msg, isError) {
-    var g = $('iaStatus');
-    g.textContent = msg;
-    g.className = isError ? 'error' : '';
+  /* Fila: as consultas de mapa rodam uma de cada vez (os serviços limitam 1 consulta por segundo) */
+  var geoQueue = Promise.resolve();
+  function enqueue(fn) {
+    geoQueue = geoQueue.then(fn).catch(function (e) { console.error(e); });
+    return geoQueue;
   }
+
+
+  /* auxiliares para montar blocos de resultado */
   function mk(tag, text, cls) {
     var e = document.createElement(tag);
     if (text != null) e.textContent = text;
@@ -1188,106 +1125,9 @@
     return ul;
   }
 
-  function renderIa(data) {
-    var box = $('iaResult');
-    box.textContent = '';
-    box.appendChild(mk('p', 'Resultado de IA com busca na web. Pode misturar pessoas homônimas: confira as fontes antes de usar.', 'ia-warn'));
-
-    var r = data.resultado;
-    if (!r) {
-      var raw = iaSection('Resposta da IA (formato inesperado)');
-      raw.appendChild(mk('p', data.texto || 'Sem conteúdo.'));
-      box.appendChild(raw);
-    } else {
-      if (r.resumo) { var a = iaSection('Resumo'); a.appendChild(mk('p', r.resumo)); box.appendChild(a); }
-      if (r.sobrenome) {
-        var b = iaSection('Sobrenome');
-        b.appendChild(mk('p', (r.sobrenome.avaliacao || 'indeterminado') + (r.sobrenome.explicacao ? '. ' + r.sobrenome.explicacao : '')));
-        box.appendChild(b);
-      }
-      var v = Array.isArray(r.vinculos_empresariais) ? r.vinculos_empresariais : [];
-      var c = iaSection('Vínculos empresariais encontrados');
-      if (v.length) c.appendChild(iaList(v, function (li, it) {
-        li.appendChild(document.createTextNode(it.descricao || ''));
-        if (it.confianca) li.appendChild(mk('span', ' (confiança ' + it.confianca + ')', 'conf'));
-      }));
-      else c.appendChild(mk('p', 'Nada encontrado.'));
-      box.appendChild(c);
-
-      var pr = Array.isArray(r.presenca_online) ? r.presenca_online : [];
-      var d = iaSection('Presença online');
-      if (pr.length) d.appendChild(iaList(pr, function (li, it) {
-        li.appendChild(document.createTextNode((it.rede ? it.rede + ': ' : '') + (it.descricao || '')));
-        if (it.confianca) li.appendChild(mk('span', ' (confiança ' + it.confianca + ')', 'conf'));
-      }));
-      else d.appendChild(mk('p', 'Nada encontrado.'));
-      box.appendChild(d);
-
-      if (r.homonimos) { var h = iaSection('Risco de homônimo'); h.appendChild(mk('p', r.homonimos)); box.appendChild(h); }
-      var al = Array.isArray(r.alertas) ? r.alertas : [];
-      if (al.length) {
-        var e = iaSection('Pontos para conferir');
-        e.appendChild(iaList(al, function (li, t) { li.textContent = t; }));
-        box.appendChild(e);
-      }
-    }
-
-    var fontes = (data.fontes || []).filter(function (f) { return /^https:\/\//.test(f.url); });
-    var f = iaSection('Fontes consultadas');
-    if (fontes.length) f.appendChild(iaList(fontes, function (li, it) {
-      var a = mk('a', it.titulo || it.url);
-      a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      li.appendChild(a);
-    }));
-    else f.appendChild(mk('p', 'A IA não listou fontes. Trate o resultado com mais cautela.'));
-    box.appendChild(f);
-    box.classList.add('show');
-  }
-
-  async function analisarNome() {
-    var nome = fields.nome.value.trim();
-    if (nome.length < 5) { setIaStatus('Preencha o nome do cliente.', true); return; }
-    if (!WORKER_URL) {
-      setIaStatus('Falta configurar WORKER_URL no início do script, com o endereço do seu Cloudflare Worker.', true);
-      return;
-    }
-    var cidade = fields.cidade.value.trim(), uf = fields.uf.value.trim();
-    if (!window.confirm('O nome e a cidade do cliente serão enviados ao seu Worker na Cloudflare e a um serviço de IA externo (Google Gemini) para pesquisa na web. Continuar?')) return;
-    var btn = $('iaBtn');
-    btn.disabled = true;
-    $('iaResult').classList.remove('show');
-    setIaStatus('Pesquisando e analisando. Isso pode levar até um minuto…');
-    try {
-      var resp = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nome, cidade: cidade, uf: uf })
-      });
-      var data = await resp.json().catch(function () { return {}; });
-      if (!resp.ok) {
-        setIaStatus(data.erro || 'A análise falhou (erro ' + resp.status + ').', true);
-        return;
-      }
-      renderIa(data);
-      setIaStatus('');
-    } catch (e) {
-      console.error(e);
-      setIaStatus('Não consegui falar com o Worker. Confira o endereço em WORKER_URL e se o ALLOWED_ORIGIN do Worker é o endereço deste site.', true);
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  /* Fila: as consultas de mapa rodam uma de cada vez (os serviços limitam 1 consulta por segundo) */
-  var geoQueue = Promise.resolve();
-  function enqueue(fn) {
-    geoQueue = geoQueue.then(fn).catch(function (e) { console.error(e); });
-    return geoQueue;
-  }
-
 
   /* ---------- análise de risco da operação ---------- */
-  var geoRes = { assin: {}, lr: null, lojaCidade: '', resCidade: '' };
+  var geoRes = { assin: {}, lr: null, lojaCidade: '' };
   var DOMINIOS_DESCARTAVEIS = ['mailinator.com', 'guerrillamail.com', 'tempmail.com', '10minutemail.com',
     'yopmail.com', 'sharklasers.com', 'trashmail.com', 'temp-mail.org'];
 
@@ -1303,64 +1143,33 @@
     return lat != null && lon != null && Math.abs(lat + 23.5475) < 0.002 && Math.abs(lon + 46.6361) < 0.002;
   }
 
-  /* Limites usados nas regras. Para mudar um critério, altere o número aqui. */
-  var LIMITES = {
-    veiculoAlto: 100000,  /* valor do veículo (R$) a partir do qual a entrada alta chama atenção */
-    entradaAltaPct: 40,   /* entrada acima de X% do valor do veículo */
-    rendaAlta: 20000,     /* renda mensal declarada considerada alta (R$) */
-    anosUsado: 2          /* veículo com X anos ou mais de fabricação conta como usado */
-  };
-
-  function idadeVeiculoAnos() {
-    var m = String(dadosPdf.ano || '').match(/^((?:19|20)\d{2})/);
-    return m ? new Date().getFullYear() - parseInt(m[1], 10) : null;
-  }
-
-  function cidadesDiferem() {
-    return !!(geoRes.resCidade && geoRes.lojaCidade && norm(geoRes.resCidade) !== norm(geoRes.lojaCidade));
-  }
-
-  /* true se a parte do e-mail antes do @ tem alguma parte do nome; null se não dá para avaliar */
-  function emailTemNome(email) {
-    if (!email || email.indexOf('@') < 1) return null;
-    var letras = norm(email.split('@')[0]).replace(/[^a-z]/g, '');
-    var tokens = norm(fields.nome.value).split(/\s+/).filter(function (t) {
-      return t.length >= 3 && !/^(dos|das|del|van|von)$/.test(t);
-    });
-    if (!tokens.length) return null;
-    return tokens.some(function (t) { return letras.indexOf(t) !== -1; });
-  }
-
   /* Regras simples e transparentes. Cada sinal mostra seus pontos. Não é probabilidade de fraude. */
   function sinaisLocais() {
     var sinais = [];
     var add = function (txt, pts) { sinais.push({ texto: txt, pontos: pts }); };
 
-    /* e-mail do cadastro x nome */
+    /* e-mail x nome */
     var email = fields.email.value.trim().toLowerCase();
     if (email.indexOf('@') > 0) {
       var partes = email.split('@');
-      if (emailTemNome(email) === false) add('O e-mail do cadastro não contém nenhuma parte do nome do cliente', 10);
-      if ((partes[0].match(/\d/g) || []).length >= 4) add('E-mail com quatro ou mais números', 5);
+      var letras = norm(partes[0]).replace(/[^a-z]/g, '');
+      var tokens = norm(fields.nome.value).split(/\\s+/).filter(function (t) {
+        return t.length >= 3 && !/^(dos|das|del|van|von)$/.test(t);
+      });
+      if (tokens.length && !tokens.some(function (t) { return letras.indexOf(t) !== -1; })) {
+        add('O e-mail não contém nenhuma parte do nome do cliente', 10);
+      }
+      if ((partes[0].match(/\\d/g) || []).length >= 4) add('E-mail com quatro ou mais números', 5);
       if (DOMINIOS_DESCARTAVEIS.indexOf(partes[1]) !== -1) add('E-mail de serviço descartável (' + partes[1] + ')', 25);
-    }
-
-    /* e-mail da assinatura digital x e-mail do cadastro */
-    var emailAss = fields.assEmail.value.trim().toLowerCase();
-    if (emailAss.indexOf('@') > 0 && email.indexOf('@') > 0 && emailAss !== email) {
-      add('E-mail da assinatura digital (' + emailAss + ') é diferente do e-mail do cadastro (' + email + ')', 25);
-      if (emailTemNome(emailAss) === false) add('O e-mail da assinatura também não tem relação com o nome do cliente', 5);
     }
 
     /* loja x residência */
     var lr = geoRes.lr;
     if (lr) {
-      var difTxt = cidadesDiferem() ? ' (cliente em ' + geoRes.resCidade + ', loja em ' + geoRes.lojaCidade + ')' : '';
       if (lr.nivelLoja === 'cidade' || lr.nivelRes === 'cidade') {
-        if (cidadesDiferem()) add('Cliente mora em cidade diferente da loja' + difTxt + '; distância não medida com precisão', 5);
-        else add('Distância loja x residência não avaliada: endereço localizado só pela cidade', 0);
-      } else if (lr.km > 100) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente' + difTxt, 20);
-      else if (lr.km > 30) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente' + difTxt, 10);
+        add('Distância loja x residência não avaliada: endereço localizado só pela cidade', 0);
+      } else if (lr.km > 100) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente', 15);
+      else if (lr.km > 30) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente', 8);
     }
 
     /* local da assinatura */
@@ -1388,59 +1197,19 @@
     }
     if (vv && en != null && vv > 0 && en / vv * 100 < 10) add('Entrada de apenas ' + pctFmt(en / vv * 100), 5);
 
-    /* padrão: veículo caro com entrada alta */
-    if (vv && en != null && vv > LIMITES.veiculoAlto && en / vv * 100 > LIMITES.entradaAltaPct) {
-      add('Veículo de ' + brl(vv) + ' com entrada de ' + pctFmt(en / vv * 100) + ' (acima de ' + brl(LIMITES.veiculoAlto) + ' e de ' + LIMITES.entradaAltaPct + '% de entrada)', 15);
-    }
-
-    /* padrão: renda alta declarada comprando veículo usado em loja multimarcas */
-    var idadeV = idadeVeiculoAnos();
-    if (renda && renda >= LIMITES.rendaAlta && idadeV != null && idadeV >= LIMITES.anosUsado && fields.tipoLoja.value === 'multimarcas') {
-      add('Renda declarada de ' + brl(renda) + ' comprando veículo usado (' + dadosPdf.ano + ') em loja multimarcas', 10);
-    }
-
     var pontos = Math.min(100, sinais.reduce(function (n, x) { return n + x.pontos; }, 0));
     var nivel = pontos >= 45 ? 'alto' : pontos >= 20 ? 'médio' : 'baixo';
     return { sinais: sinais, pontos: pontos, nivel: nivel };
   }
 
-  function montarFatos(r) {
-    var renda = toNum(fields.renda.value), parcela = toNum(fields.parcela.value);
-    var vv = toNum(fields.valorVeic.value), en = toNum(fields.entrada.value);
-    var arred = function (x) { return x == null ? null : Math.round(x * 10) / 10; };
-    var lr = geoRes.lr, aL = geoRes.assin.loja, aR = geoRes.assin.residencia;
-    return {
-      nome: fields.nome.value.trim(),
-      email: fields.email.value.trim(),
-      email_assinatura: fields.assEmail.value.trim(),
-      profissao: fields.prof.value.trim(),
-      renda_mensal: renda,
-      cidade: fields.cidade.value.trim(), uf: fields.uf.value.trim(),
-      veiculo: { marca: dadosPdf.marca || '', modelo: fields.veiculo.value.trim(), ano: dadosPdf.ano || '', idade_anos: idadeVeiculoAnos(), valor: vv, entrada: en,
-        entrada_pct: vv && en != null ? arred(en / vv * 100) : null },
-      financiamento: { parcela: parcela, prazo_meses: toNum(fields.prazo.value),
-        parcela_sobre_renda_pct: renda && parcela ? arred(parcela / renda * 100) : null },
-      loja: { nome: fields.loja.value.trim(), cidade: geoRes.lojaCidade || '', tipo: fields.tipoLoja.value },
-      distancias: {
-        loja_residencia_km: lr ? arred(lr.km) : null,
-        loja_residencia_precisao: lr ? (lr.nivelLoja + ' / ' + lr.nivelRes) : null,
-        assinatura_loja_km: aL ? arred(aL.km) : null,
-        assinatura_residencia_km: aR ? arred(aR.km) : null,
-        cidades_diferentes: (geoRes.resCidade && geoRes.lojaCidade) ? cidadesDiferem() : null,
-        coordenadas_aproximadas: coordAproximada()
-      },
-      assinatura: { dispositivo: sigInfo ? sigInfo.disp : '' },
-      pontuacao_local: r.pontos,
-      sinais_locais: r.sinais.map(function (x) { return x.texto + ' (' + x.pontos + ' pontos)'; })
-    };
-  }
-
   function renderRiscoLocal(r) {
     var box = $('riskResult');
     box.textContent = '';
-    box.appendChild(mk('p', 'Pontuação de alerta calculada por regras no seu navegador. Não é probabilidade de fraude.', 'ia-warn'));
-    box.appendChild(mk('div', r.pontos + ' / 100', 'dist'));
-    box.appendChild(mk('div', 'Nível de alerta ' + r.nivel, 'verdict ' + (r.nivel === 'alto' ? 'far' : r.nivel === 'médio' ? 'mid' : 'near')));
+    var head = mk('div', null, 'res-head');
+    head.appendChild(mk('div', r.pontos + ' / 100', 'dist'));
+    head.appendChild(mk('div', 'Nível de alerta ' + r.nivel, 'verdict ' + (r.nivel === 'alto' ? 'far' : r.nivel === 'médio' ? 'mid' : 'near')));
+    box.appendChild(head);
+    box.appendChild(mk('p', 'Pontuação por regras, calculada no navegador. Não é probabilidade de fraude.', 'ia-warn'));
     var sec = iaSection('Sinais considerados');
     if (r.sinais.length) {
       sec.appendChild(iaList(r.sinais, function (li, x) {
@@ -1453,82 +1222,10 @@
     return box;
   }
 
-  function renderRiscoIa(box, data) {
-    box.appendChild(mk('div', null, 'risk-sep'));
-    box.appendChild(mk('p', 'Análise da IA, sem busca na web. É um apoio à conferência humana, não uma decisão.', 'ia-warn'));
-    var r = data.resultado;
-    if (!r) {
-      var raw = iaSection('Resposta da IA (formato inesperado)');
-      raw.appendChild(mk('p', data.texto || 'Sem conteúdo.'));
-      box.appendChild(raw);
-      return;
-    }
-    var n = iaSection('Nível de alerta segundo a IA');
-    n.appendChild(mk('p', (r.nivel || 'indeterminado') + (r.resumo ? '. ' + r.resumo : '')));
-    box.appendChild(n);
-    if (r.email) {
-      var e = iaSection('E-mail x nome');
-      e.appendChild(mk('p', (r.email.consistencia || 'indeterminado') + (r.email.explicacao ? '. ' + r.email.explicacao : '')));
-      box.appendChild(e);
-    }
-    var sg = Array.isArray(r.sinais) ? r.sinais : [];
-    if (sg.length) {
-      var s1 = iaSection('Indícios de alerta');
-      s1.appendChild(iaList(sg, function (li, it) {
-        li.appendChild(document.createTextNode(it.descricao || ''));
-        if (it.peso) li.appendChild(mk('span', ' (peso ' + it.peso + ')', 'conf'));
-      }));
-      box.appendChild(s1);
-    }
-    var cp = Array.isArray(r.contrapontos) ? r.contrapontos : [];
-    if (cp.length) {
-      var s2 = iaSection('Fatores que reduzem a suspeita');
-      s2.appendChild(iaList(cp, function (li, t) { li.textContent = t; }));
-      box.appendChild(s2);
-    }
-    var cf = Array.isArray(r.conferir) ? r.conferir : [];
-    if (cf.length) {
-      var s3 = iaSection('O que conferir');
-      s3.appendChild(iaList(cf, function (li, t) { li.textContent = t; }));
-      box.appendChild(s3);
-    }
-    if (r.limites) {
-      var s4 = iaSection('Limites desta análise');
-      s4.appendChild(mk('p', r.limites));
-      box.appendChild(s4);
-    }
-  }
-
-  async function analisarRisco() {
+  function analisarRisco() {
     if (!fields.nome.value.trim()) { setRiskStatus('Envie o PDF ou preencha os dados do cliente primeiro.', true); return; }
-    var r = sinaisLocais();
-    var box = renderRiscoLocal(r);
-    if (!WORKER_URL) {
-      setRiskStatus('Pontuação local calculada. Para a análise da IA, configure WORKER_URL.');
-      return;
-    }
-    if (!window.confirm('Serão enviados ao seu Worker e ao Google Gemini: nome, e-mails (do cadastro e da assinatura), profissão, renda, valores do veículo e do financiamento, cidade, loja e distâncias. Não são enviados CPF, endereço, telefone nem idade. Continuar?')) {
-      setRiskStatus('Pontuação local calculada. A IA não foi consultada.');
-      return;
-    }
-    var btn = $('riskBtn');
-    btn.disabled = true;
-    setRiskStatus('Consultando a IA…');
-    try {
-      var resp = await fetch(WORKER_URL.replace(/\/+$/, '') + '/risco', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fatos: montarFatos(r) })
-      });
-      var data = await resp.json().catch(function () { return {}; });
-      if (!resp.ok) { setRiskStatus(data.erro || 'A análise falhou (erro ' + resp.status + ').', true); return; }
-      renderRiscoIa(box, data);
-      setRiskStatus('');
-    } catch (e) {
-      console.error(e);
-      setRiskStatus('Não consegui falar com o Worker. Confira o endereço em WORKER_URL.', true);
-    } finally {
-      btn.disabled = false;
-    }
+    renderRiscoLocal(sinaisLocais());
+    setRiskStatus('');
   }
 
   /* ---------- eventos ---------- */
@@ -1558,7 +1255,6 @@
     });
   });
   $('compareLR').addEventListener('click', function () { enqueue(compareLojaResidencia); });
-  $('iaBtn').addEventListener('click', analisarNome);
   $('riskBtn').addEventListener('click', analisarRisco);
 
   $('copy').addEventListener('click', function () {
@@ -1593,10 +1289,8 @@
     $('result').classList.remove('show');
     $('geoResult').classList.remove('show');
     $('lrResult').classList.remove('show');
-    $('iaResult').classList.remove('show');
     $('riskResult').classList.remove('show');
     setRiskStatus('');
-    setIaStatus('');
     setLrStatus('');
     setStatus('');
     setGeoStatus('');
