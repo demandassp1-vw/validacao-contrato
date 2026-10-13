@@ -789,12 +789,29 @@
       return j && !j.erro ? j : null;
     } catch (e) { return null; }
   }
-  async function nominatimSearch(params) {
+  async function nominatimSearch(params, cidade) {
     var u = new URL('https://nominatim.openstreetmap.org/search');
-    var all = Object.assign({ format: 'jsonv2', limit: 1, addressdetails: 1, countrycodes: 'br', 'accept-language': 'pt-BR' }, params);
+    var all = Object.assign({ format: 'jsonv2', limit: 5, addressdetails: 1, countrycodes: 'br', 'accept-language': 'pt-BR' }, params);
     Object.keys(all).forEach(function (k) { u.searchParams.set(k, all[k]); });
     var a = await getJson(u.toString());
-    return a && a[0] ? a[0] : null;
+    if (!a || !a.length) return null;
+    for (var i = 0; i < a.length; i++) if (cidadeConfere(a[i], cidade)) return a[i];
+    return null;
+  }
+  /* Descarta resultado de outra cidade (ex.: "Rua Bolívia" existe em São Paulo e em São Bernardo do Campo).
+     Se o resultado não informa a cidade, não dá para conferir e ele é aceito. */
+  function cidadeConfere(r, cidade) {
+    if (!cidade) return true;
+    var c = cityOf(r && r.address);
+    return !c || norm(c) === norm(cidade);
+  }
+  /* "R" -> "Rua", "AV" -> "Avenida" etc., como vêm abreviados no cadastro */
+  function expandirRua(rua) {
+    var m = { r: 'Rua', av: 'Avenida', al: 'Alameda', tv: 'Travessa', est: 'Estrada', estr: 'Estrada', pc: 'Praça', pca: 'Praça', rod: 'Rodovia', lgo: 'Largo', vl: 'Viela' };
+    return String(rua || '').replace(/^\s*([A-Za-z]{1,4})\.?\s+/, function (all, w) {
+      var k = w.toLowerCase();
+      return m[k] ? m[k] + ' ' : all;
+    }).trim();
   }
   async function nominatimReverse(lat, lon) {
     var u = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=pt-BR&lat=' +
@@ -899,32 +916,42 @@
      Tenta o OpenCage (se o Worker tiver a chave) e o Nominatim, e fica com o melhor resultado. */
   async function geocodeEndereco(a) {
     var estado = UF_NOMES[a.uf] || a.uf;
+    var rua = expandirRua(a.rua);
     var best = null;
     var consider = function (cand) {
       if (cand && (!best || NIVEL_RANK[cand.nivel] > NIVEL_RANK[best.nivel])) best = cand;
     };
 
-    /* 1) OpenCage */
-    if (WORKER_URL && !ocOff && a.rua && a.cidade) {
+    /* 1) OpenCage: duas buscas (com e sem bairro); resultado de outra cidade é descartado */
+    if (WORKER_URL && !ocOff && rua && a.cidade) {
       var cepFmt = a.cep && a.cep.length === 8 ? a.cep.slice(0, 5) + '-' + a.cep.slice(5) : '';
-      var q = [a.rua + (a.numero ? ', ' + a.numero : ''), a.bairro, a.cidade, estado, cepFmt, 'Brasil']
-        .filter(Boolean).join(', ');
-      var o = await ocQuery(q, false);
-      if (o) consider({ r: ocShape(o), nivel: ocNivel(o) });
-      if (best && (best.nivel === 'número' || (best.nivel === 'rua' && !a.numero))) return best;
-      await sleep(1100);
+      var consultas = [
+        [rua + (a.numero ? ', ' + a.numero : ''), a.bairro, a.cidade, estado, cepFmt, 'Brasil'],
+        [rua + (a.numero ? ' ' + a.numero : ''), cepFmt, a.cidade, 'Brasil']
+      ];
+      for (var j = 0; j < consultas.length; j++) {
+        var o = await ocQuery(consultas[j].filter(Boolean).join(', '), false);
+        if (o) {
+          var shaped = ocShape(o);
+          if (cidadeConfere(shaped, a.cidade)) consider({ r: shaped, nivel: ocNivel(o) });
+        }
+        if (best && (best.nivel === 'número' || (best.nivel === 'rua' && !a.numero))) return best;
+        await sleep(1100);
+      }
     }
 
-    /* 2) Nominatim, do mais preciso ao menos preciso */
+    /* 2) Nominatim, do mais preciso ao menos preciso; só aceita resultado da cidade do endereço */
     var tentativas = [];
-    if (a.rua && a.numero && a.cidade) tentativas.push(['número', { street: a.numero + ' ' + a.rua, city: a.cidade, state: estado }]);
-    if (a.rua && a.cidade) tentativas.push(['rua', { street: a.rua, city: a.cidade, state: estado }]);
+    if (rua && a.numero && a.cidade) tentativas.push(['número', { street: a.numero + ' ' + rua, city: a.cidade, state: estado }]);
+    if (rua && a.numero && a.cidade && a.bairro) tentativas.push(['número', { q: rua + ', ' + a.numero + ', ' + a.bairro + ', ' + a.cidade + ', ' + estado }]);
+    if (rua && a.cidade) tentativas.push(['rua', { street: rua, city: a.cidade, state: estado }]);
     if (a.cep && a.cep.length === 8) tentativas.push(['CEP', { postalcode: a.cep.slice(0, 5) + '-' + a.cep.slice(5) }]);
     if (a.cidade) tentativas.push(['cidade', { city: a.cidade, state: estado }]);
     for (var i = 0; i < tentativas.length; i++) {
+      if (best && NIVEL_RANK[tentativas[i][0]] <= NIVEL_RANK[best.nivel]) continue;
       try {
-        var r = await nominatimSearch(tentativas[i][1]);
-        if (r) { consider({ r: r, nivel: tentativas[i][0] }); break; }
+        var r = await nominatimSearch(tentativas[i][1], a.cidade);
+        if (r) { consider({ r: r, nivel: tentativas[i][0] }); if (tentativas[i][0] === 'número') break; }
       } catch (e) { /* tenta o próximo nível */ }
       await sleep(1100);
     }
@@ -1053,6 +1080,8 @@
         return;
       }
       var res = await enderecoResidencia();
+      geoRes.cidadeRes = res.cidade || '';
+      geoRes.lojaCidade = loja.cidade || '';
       var gl = await geocodeEndereco(loja);
       await sleep(1100);
       var gr = await geocodeEndereco(res);
@@ -1069,7 +1098,7 @@
 
       var cls, txt;
       if (km <= 5) { cls = 'near'; txt = 'Loja perto da residência do cliente'; }
-      else if (km <= 30) { cls = 'mid'; txt = 'Loja na mesma região da residência do cliente'; }
+      else if (km <= 20) { cls = 'mid'; txt = 'Loja na mesma região da residência do cliente'; }
       else { cls = 'far'; txt = 'Loja longe da residência do cliente'; }
       if (loja.cidade && res.cidade && norm(loja.cidade) !== norm(res.cidade)) {
         txt += '. Cidades diferentes: loja em ' + loja.cidade + ', cliente em ' + res.cidade;
@@ -1188,7 +1217,12 @@
     } else if (lrOk) {
       if (lr.km > 300) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente', 40);
       else if (lr.km > 100) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente', 25);
-      else if (lr.km > 30) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente', 12);
+      else if (lr.km > 20) add('Loja a ' + fmtDist(lr.km) + ' da residência do cliente (acima de 20 km)', 15);
+    }
+
+    /* 1b) cidade da residência diferente da cidade da loja */
+    if (geoRes.lojaCidade && geoRes.cidadeRes && norm(geoRes.lojaCidade) !== norm(geoRes.cidadeRes)) {
+      add('Cliente mora em outra cidade que a loja (residência em ' + geoRes.cidadeRes + ', loja em ' + geoRes.lojaCidade + ')', 10);
     }
 
     /* 2) e-mail de terceiro */
