@@ -65,6 +65,8 @@
   .row1 { display: grid; grid-template-columns: minmax(0, 1fr) 105px 78px 112px; gap: 8px 12px; margin-bottom: 8px; }
   .nome-wrap { display: flex; gap: 6px; align-items: stretch; }
   .nome-wrap input { flex: 1; min-width: 0; }
+  .res-head.tint { padding: 6px 10px; border-radius: 4px; }
+  .res-head.tint .verdict, .res-head.tint .dist { color: inherit; }
   button.mini { padding: 4px 8px; font-size: .75rem; white-space: nowrap; }
   .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 12px; }
   .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -175,7 +177,7 @@
           <label for="fNome">Nome</label>
           <div class="nome-wrap">
             <input id="fNome" type="text" autocomplete="off">
-            <button type="button" class="ghost mini" id="googleBtn" title="Copia &quot;Nome&quot; &quot;Cidade&quot; e abre a busca no Google">Pesq. Google</button>
+            <button type="button" class="mini" id="googleBtn" title="Copia &quot;Nome&quot; &quot;Cidade&quot; e abre a busca no Google">Pesq. Google</button>
           </div>
         </div>
         <div class="field">
@@ -1107,6 +1109,7 @@
       var nivelTxt = { 'número': 'localizado pelo número', 'rua': 'localizado só pela rua (número não encontrado no mapa)',
         'bairro': 'localizado só pelo bairro', 'CEP': 'localizado só pelo CEP', 'cidade': 'localizado só pela cidade' };
       $('lrDist').textContent = fmtDist(km);
+      aplicarFaixa($('lrResult').querySelector('.res-head'), faixaDist(km));
       var v = $('lrVerdict');
       v.textContent = txt;
       v.className = 'verdict ' + cls;
@@ -1185,6 +1188,23 @@
   }
 
   /* ----- campos em tom de alerta, com ícone ----- */
+  /* Faixas de cor: 1 amarelo, 2 laranja, 3 vermelho claro, 4 vermelho forte */
+  var FAIXAS = [null,
+    { bg: '#fff3b0', fg: '#5a4700' },
+    { bg: '#ffd9a8', fg: '#7c2d12' },
+    { bg: '#ffc9c4', fg: '#7a1a12' },
+    { bg: '#c62828', fg: '#ffffff' }];
+  var COR_ALERTA = { bg: '#fff4e5', fg: '#7c2d12' };
+  function faixaDist(km) { return km >= 100 ? 4 : km >= 80 ? 3 : km >= 50 ? 2 : km >= 20 ? 1 : 0; }
+  function faixaRisco(p) { return p >= 50 ? 4 : p >= 30 ? 2 : p >= 10 ? 1 : 0; }
+  function aplicarFaixa(el, n) {
+    if (!el) return;
+    var f = FAIXAS[n];
+    el.classList.toggle('tint', !!f);
+    el.style.background = f ? f.bg : '';
+    el.style.color = f ? f.fg : '';
+  }
+
   function setAlerta(input, ligado, msg) {
     var f = input.closest('.field');
     f.classList.toggle('alerta', !!ligado);
@@ -1253,6 +1273,7 @@
     var box = $('riskResult');
     box.textContent = '';
     var head = mk('div', null, 'res-head');
+    aplicarFaixa(head, faixaRisco(r.pontos));
     head.appendChild(mk('div', r.pontos + ' / 100', 'dist'));
     head.appendChild(mk('div', 'Nível de alerta ' + r.nivel, 'verdict ' + (r.nivel === 'alto' ? 'far' : r.nivel === 'médio' ? 'mid' : 'near')));
     box.appendChild(head);
@@ -1339,26 +1360,34 @@
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function montarResumo() {
+    atualizarAlertas();
+    var temAlerta = function (inp) { return inp.closest('.field').classList.contains('alerta'); };
     var vv = toNum(fields.valorVeic.value);
     var en = toNum(fields.entrada.value);
     var pctEnt = vv && en != null && vv > 0 ? en / vv * 100 : null;
-    var end = fields.endereco.value + (fields.bairro.value ? ', ' + fields.bairro.value : '') +
-      (fields.cidade.value ? ', ' + fields.cidade.value : '') + (fields.uf.value ? '/' + fields.uf.value : '');
+    var end = fields.endereco.value + (fields.bairro.value ? ', ' + fields.bairro.value : '');
+    var cidadeTxt = fields.cidade.value + (fields.uf.value ? '/' + fields.uf.value : '');
+    var cidAlerta = temAlerta(fields.cidade);
+    if (cidAlerta && geoRes.lojaCidade) cidadeTxt += ' (loja em ' + geoRes.lojaCidade + ')';
     var linhas = [
       ['Proposta', fields.proposta.value],
       ['Cliente', fields.nome.value],
       ['Idade', fields.idade.value],
       ['Endereço', end],
+      ['Cidade', cidadeTxt, cidAlerta ? { cor: COR_ALERTA, icone: true } : null],
       ['CEP', fields.cep.value],
-      ['E-mail do cadastro', fields.email.value]
+      ['E-mail do cadastro', fields.email.value, temAlerta(fields.email) ? { cor: COR_ALERTA, icone: true } : null]
     ];
-    if (fields.emailAssin.value) linhas.push(['E-mail da assinatura', fields.emailAssin.value]);
+    if (fields.emailAssin.value) {
+      linhas.push(['E-mail da assinatura', fields.emailAssin.value, temAlerta(fields.emailAssin) ? { cor: COR_ALERTA, icone: true } : null]);
+    }
     linhas.push(['Veículo', fields.veiculo.value]);
     linhas.push(['Valor do veículo', vv ? brl(vv) : '']);
     linhas.push(['Entrada', en != null ? brl(en) + (pctEnt != null ? ' (' + pctFmt(pctEnt) + ' do veículo)' : '') : '']);
     linhas.push(['Loja', fields.loja.value + (fields.cnpj.value ? ' - CNPJ ' + fields.cnpj.value : '')]);
     if ($('lrResult').classList.contains('show')) {
-      linhas.push(['Loja x residência', $('lrDist').textContent + ' (' + $('lrVerdict').textContent + ')']);
+      var fd = geoRes.lr ? faixaDist(geoRes.lr.km) : 0;
+      linhas.push(['Loja x residência', $('lrDist').textContent + ' (' + $('lrVerdict').textContent + ')', fd ? { cor: FAIXAS[fd] } : null]);
     }
     if ($('geoResult').classList.contains('show')) {
       linhas.push(['Local da assinatura', $('gDist').textContent + ' (' + $('gVerdict').textContent + ')']);
@@ -1366,17 +1395,28 @@
     if (fields.nome.value.trim()) {
       var r = sinaisLocais();
       var sin = r.sinais.filter(function (x) { return x.pontos > 0; }).map(function (x) { return x.texto; });
-      linhas.push(['Análise de risco', r.pontos + ' / 100, nível de alerta ' + r.nivel + (sin.length ? '. ' + sin.join('; ') : '. Nenhum sinal de alerta.')]);
+      var fr = faixaRisco(r.pontos);
+      linhas.push(['Análise de risco', r.pontos + ' / 100, nível de alerta ' + r.nivel + (sin.length ? '. ' + sin.join('; ') : '. Nenhum sinal de alerta.'),
+        fr ? { cor: FAIXAS[fr] } : null]);
     }
     var td = 'border:1px solid #cde3d3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:14px;';
+    var tit = 'Dados da proposta' + (fields.proposta.value ? ' ' + esc(fields.proposta.value) : '');
     var html = '<table style="border-collapse:collapse;border:1px solid #cde3d3;">' +
-      '<tr><td colspan="2" style="' + td + 'background:#14532d;color:#ffffff;font-weight:bold;">Dados da proposta' +
-      (fields.proposta.value ? ' ' + esc(fields.proposta.value) : '') + '</td></tr>' +
+      '<tr><td colspan="2" bgcolor="#14532d" style="' + td + 'background:#14532d;color:#ffffff;">' +
+      '<font color="#ffffff"><b><span style="color:#ffffff;">' + tit + '</span></b></font></td></tr>' +
       linhas.map(function (l) {
+        var est = l[2];
+        var val = (est && est.icone ? '\u26A0 ' : '') + esc(l[1]);
+        var tdVal = td, attr = '';
+        if (est) {
+          tdVal += 'background:' + est.cor.bg + ';color:' + est.cor.fg + ';';
+          attr = ' bgcolor="' + est.cor.bg + '"';
+          val = '<font color="' + est.cor.fg + '"><span style="color:' + est.cor.fg + ';">' + val + '</span></font>';
+        }
         return '<tr><td style="' + td + 'background:#e3f3e8;font-weight:bold;white-space:nowrap;">' + esc(l[0]) +
-          '</td><td style="' + td + '">' + esc(l[1]) + '</td></tr>';
+          '</td><td' + attr + ' style="' + tdVal + '">' + val + '</td></tr>';
       }).join('') + '</table>';
-    var texto = linhas.map(function (l) { return l[0] + ': ' + l[1]; }).join('\n');
+    var texto = linhas.map(function (l) { return (l[2] && l[2].icone ? '\u26A0 ' : '') + l[0] + ': ' + l[1]; }).join('\n');
     return { html: html, texto: texto };
   }
   function copiarHtml(html, texto) {
