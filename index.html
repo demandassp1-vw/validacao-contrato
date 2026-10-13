@@ -78,6 +78,14 @@
   }
   .field input:focus-visible { outline: 2px solid var(--verde-escuro); outline-offset: 1px; border-color: var(--verde-escuro); }
   .field input.missing { border-color: var(--warn); }
+  .field textarea {
+    font: inherit; font-size: .88rem; color: var(--ink); background: #fff; resize: vertical;
+    border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 100%;
+  }
+  .field textarea:focus-visible { outline: 2px solid var(--verde-escuro); outline-offset: 1px; border-color: var(--verde-escuro); }
+  .field textarea.missing { border-color: var(--warn); }
+  .entry[hidden] { display: none; }
+  #mailBtn:disabled { cursor: not-allowed; }
   .field input[readonly] { background: #f6fbf8; }
   .field.alerta label { color: #9a3412; }
   .field.alerta label::before { content: "\26A0\00a0"; }
@@ -310,6 +318,15 @@
         <button type="button" id="riskBtn">Recalcular</button>
       </div>
       <div class="geo-result" id="riskResult"></div>
+    </div>
+
+    <div class="entry" id="parecerBox" hidden>
+      <h2>Parecer do GCM</h2>
+      <div class="field">
+        <label for="fParecer">Parecer do GCM (obrigatório quando há risco)</label>
+        <textarea id="fParecer" rows="4" autocomplete="off"></textarea>
+        <span class="hint warn" id="hParecer"></span>
+      </div>
     </div>
 
     <div class="actions">
@@ -562,7 +579,7 @@
 
   /* ---------- tela ---------- */
   var fields = {
-    nome: $('fNome'), nasc: $('fNasc'), idade: $('fIdade'), proposta: $('fProposta'), cep: $('fCep'),
+    nome: $('fNome'), nasc: $('fNasc'), idade: $('fIdade'), proposta: $('fProposta'), parecer: $('fParecer'), cep: $('fCep'),
     email: $('fEmail'), veiculo: $('fVeiculo'), valorVeic: $('fValorVeic'), entrada: $('fEntrada'),
     endereco: $('fEnd'), bairro: $('fBairro'), cidade: $('fCidade'), uf: $('fUf'),
     lat: $('fLat'), lon: $('fLon'), loja: $('fLoja'), cnpj: $('fCnpj'), emailAssin: $('fEmailAssin')
@@ -651,6 +668,7 @@
     geoRes = { assin: {}, lr: null, lojaCidade: '', cidadeRes: '' };
     sigInfo = null;
     $('riskResult').classList.remove('show');
+    fields.parecer.value = ''; riscoPontos = 0; atualizarParecer();
     setRiskStatus('');
     setStatus('Lendo o PDF…');
     $('result').classList.remove('show');
@@ -1165,6 +1183,17 @@
 
   /* ---------- análise de risco da operação ---------- */
   var geoRes = { assin: {}, lr: null, lojaCidade: '', cidadeRes: '' };
+  var riscoPontos = 0;
+  /* Parecer do GCM: aparece quando o risco é maior que zero e, enquanto vazio, trava o botão de e-mail */
+  function atualizarParecer() {
+    var precisa = riscoPontos > 0;
+    $('parecerBox').hidden = !precisa;
+    var falta = precisa && !fields.parecer.value.trim();
+    $('mailBtn').disabled = falta;
+    $('mailBtn').title = falta ? 'Preencha o parecer do GCM para liberar o e-mail' : '';
+    $('hParecer').textContent = falta ? 'Preenchimento obrigatório: o botão E-mail De Acordo fica bloqueado até preencher.' : '';
+    fields.parecer.classList.toggle('missing', falta);
+  }
   function setRiskStatus(msg, isError) {
     var g = $('riskStatus');
     g.textContent = msg;
@@ -1274,6 +1303,8 @@
     box.textContent = '';
     var head = mk('div', null, 'res-head');
     aplicarFaixa(head, faixaRisco(r.pontos));
+    riscoPontos = r.pontos;
+    atualizarParecer();
     head.appendChild(mk('div', r.pontos + ' / 100', 'dist'));
     head.appendChild(mk('div', 'Nível de alerta ' + r.nivel, 'verdict ' + (r.nivel === 'alto' ? 'far' : r.nivel === 'médio' ? 'mid' : 'near')));
     box.appendChild(head);
@@ -1282,7 +1313,6 @@
     if (r.sinais.length) {
       sec.appendChild(iaList(r.sinais, function (li, x) {
         li.appendChild(document.createTextNode(x.texto));
-        li.appendChild(mk('span', ' (+' + x.pontos + ')', 'conf'));
       }));
     } else sec.appendChild(mk('p', 'Nenhum sinal de alerta pelas regras.'));
     box.appendChild(sec);
@@ -1354,11 +1384,14 @@
   $('riskBtn').addEventListener('click', analisarRisco);
   $('googleBtn').addEventListener('click', pesquisarGoogle);
   ['email', 'emailAssin', 'cidade'].forEach(function (k) { fields[k].addEventListener('input', atualizarAlertas); });
+  fields.parecer.addEventListener('input', atualizarParecer);
 
   /* ---------- E-mail De Acordo ---------- */
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
+  /* No e-mail não se usa fundo escuro: ao colar com "Mesclar formatação" o Outlook descarta a cor da fonte */
+  function corEmail(n) { return n === 4 ? { bg: '#f28b82', fg: '#4a0a06' } : FAIXAS[n]; }
   function montarResumo() {
     atualizarAlertas();
     var temAlerta = function (inp) { return inp.closest('.field').classList.contains('alerta'); };
@@ -1387,7 +1420,7 @@
     linhas.push(['Loja', fields.loja.value + (fields.cnpj.value ? ' - CNPJ ' + fields.cnpj.value : '')]);
     if ($('lrResult').classList.contains('show')) {
       var fd = geoRes.lr ? faixaDist(geoRes.lr.km) : 0;
-      linhas.push(['Loja x residência', $('lrDist').textContent + ' (' + $('lrVerdict').textContent + ')', fd ? { cor: FAIXAS[fd] } : null]);
+      linhas.push(['Loja x residência', $('lrDist').textContent + ' (' + $('lrVerdict').textContent + ')', fd ? { cor: corEmail(fd) } : null]);
     }
     if ($('geoResult').classList.contains('show')) {
       linhas.push(['Local da assinatura', $('gDist').textContent + ' (' + $('gVerdict').textContent + ')']);
@@ -1397,16 +1430,17 @@
       var sin = r.sinais.filter(function (x) { return x.pontos > 0; }).map(function (x) { return x.texto; });
       var fr = faixaRisco(r.pontos);
       linhas.push(['Análise de risco', r.pontos + ' / 100, nível de alerta ' + r.nivel + (sin.length ? '. ' + sin.join('; ') : '. Nenhum sinal de alerta.'),
-        fr ? { cor: FAIXAS[fr] } : null]);
+        fr ? { cor: corEmail(fr) } : null]);
     }
+    if (riscoPontos > 0 && fields.parecer.value.trim()) linhas.unshift(['Parecer do GCM', fields.parecer.value.trim()]);
     var td = 'border:1px solid #cde3d3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:14px;';
     var tit = 'Dados da proposta' + (fields.proposta.value ? ' ' + esc(fields.proposta.value) : '');
     var html = '<table style="border-collapse:collapse;border:1px solid #cde3d3;">' +
-      '<tr><td colspan="2" bgcolor="#14532d" style="' + td + 'background:#14532d;color:#ffffff;">' +
-      '<font color="#ffffff"><b><span style="color:#ffffff;">' + tit + '</span></b></font></td></tr>' +
+      '<tr><td colspan="2" bgcolor="#a9d6b7" style="' + td + 'background:#a9d6b7;color:#14291d;">' +
+      '<font color="#14291d"><b><span style="color:#14291d;">' + tit + '</span></b></font></td></tr>' +
       linhas.map(function (l) {
         var est = l[2];
-        var val = (est && est.icone ? '\u26A0 ' : '') + esc(l[1]);
+        var val = (est && est.icone ? '\u26A0 ' : '') + esc(l[1]).replace(/\r?\n/g, '<br>');
         var tdVal = td, attr = '';
         if (est) {
           tdVal += 'background:' + est.cor.bg + ';color:' + est.cor.fg + ';';
@@ -1441,6 +1475,13 @@
     });
   }
   $('mailBtn').addEventListener('click', function () {
+    if (fields.nome.value.trim()) riscoPontos = sinaisLocais().pontos;
+    atualizarParecer();
+    if (riscoPontos > 0 && !fields.parecer.value.trim()) {
+      setStatus('Preencha o parecer do GCM antes de enviar o e-mail De Acordo.', true);
+      fields.parecer.focus();
+      return;
+    }
     var prop = fields.proposta.value.trim();
     var loja = fields.loja.value.trim();
     var assunto = 'De Acordo - Pagamento da proposta ' + prop + ' - loja ' + loja;
@@ -1462,6 +1503,7 @@
     $('geoResult').classList.remove('show');
     $('lrResult').classList.remove('show');
     $('riskResult').classList.remove('show');
+    fields.parecer.value = ''; riscoPontos = 0; atualizarParecer();
     setRiskStatus('');
     setLrStatus('');
     setStatus('');
