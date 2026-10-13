@@ -1332,9 +1332,9 @@
     riscoPontos = r.pontos;
     atualizarParecer();
     head.appendChild(mk('div', r.pontos + ' / 100', 'dist'));
-    head.appendChild(mk('div', 'Nível de alerta ' + r.nivel, 'verdict ' + (r.nivel === 'alto' ? 'far' : r.nivel === 'médio' ? 'mid' : 'near')));
+    head.appendChild(mk('div', r.nivel.charAt(0).toUpperCase() + r.nivel.slice(1) + ' risco', 'verdict ' + (r.nivel === 'alto' ? 'far' : r.nivel === 'médio' ? 'mid' : 'near')));
     box.appendChild(head);
-    box.appendChild(mk('p', 'Pontuação por regras, calculada no navegador. Não é probabilidade de fraude.', 'ia-warn'));
+    box.appendChild(mk('p', 'Pontuação por regras, calculada no navegador.', 'ia-warn'));
     var sec = iaSection('Sinais considerados');
     if (r.sinais.length) {
       sec.appendChild(iaList(r.sinais, function (li, x) {
@@ -1455,7 +1455,7 @@
       var r = sinaisLocais();
       var sin = r.sinais.filter(function (x) { return x.pontos > 0; }).map(function (x) { return x.texto; });
       var fr = faixaRisco(r.pontos);
-      linhas.push(['Análise de risco', r.pontos + ' / 100, nível de alerta ' + r.nivel + (sin.length ? '. ' + sin.join('; ') : '. Nenhum sinal de alerta.'),
+      linhas.push(['Análise de risco', r.pontos + ' / 100, ' + r.nivel + ' risco' + (sin.length ? '. ' + sin.join('; ') : '. Nenhum sinal de alerta.'),
         fr ? { cor: corEmail(fr) } : null]);
     }
     [['Aprovação automática', 'fAprov'], ['Veículo compatível com a loja', 'fVeicLoja'], ['Loja de recorrência', 'fRecorr']].forEach(function (c) {
