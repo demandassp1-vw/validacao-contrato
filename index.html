@@ -84,7 +84,7 @@
     border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 100%;
   }
   .field select:focus-visible { outline: 2px solid var(--verde-escuro); outline-offset: 1px; border-color: var(--verde-escuro); }
-  @media (max-width: 640px) { .fields.checks { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .fields.checks { grid-template-columns: 1fr; } .fields.checks .s2 { grid-column: 1 / -1; } }
   .field textarea {
     font: inherit; font-size: .88rem; color: var(--ink); background: #fff; resize: vertical;
     border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 100%;
@@ -337,7 +337,7 @@
     </div>
 
     <div class="entry" id="checkBox">
-      <h2>Conferências do gestor</h2>
+      <h2>Conferências manual do GCM</h2>
       <div class="fields checks">
         <div class="field">
           <label for="fAprov">Aprovação automática?</label>
@@ -350,6 +350,14 @@
         <div class="field">
           <label for="fRecorr">Loja de recorrência?</label>
           <select id="fRecorr"><option value="">Selecione</option><option>Sim</option><option>Não</option></select>
+        </div>
+        <div class="field s2">
+          <label for="fAntigoNome">Nome do antigo proprietário do carro</label>
+          <input id="fAntigoNome" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="fAntigoDoc">CPF / CNPJ do antigo proprietário</label>
+          <input id="fAntigoDoc" type="text" inputmode="numeric" autocomplete="off" placeholder="CPF ou CNPJ">
         </div>
       </div>
     </div>
@@ -690,11 +698,16 @@
       setStatus('Esse arquivo não é um PDF. Escolha o PDF da CCB.', true);
       return;
     }
+    geracao++;
     geoRes = { assin: {}, lr: null, lojaCidade: '', cidadeRes: '' };
     sigInfo = null;
+    $('geoResult').classList.remove('show');
+    $('lrResult').classList.remove('show');
     $('riskResult').classList.remove('show');
+    setLrStatus(''); setGeoStatus('');
     fields.parecer.value = ''; riscoPontos = 0; atualizarParecer();
-    ['fAprov', 'fVeicLoja', 'fRecorr'].forEach(function (id) { $(id).value = ''; });
+    ['fAprov', 'fVeicLoja', 'fRecorr', 'fAntigoNome', 'fAntigoDoc'].forEach(function (id) { $(id).value = ''; });
+    atualizarAlertas();
     setRiskStatus('');
     setStatus('Lendo o PDF…');
     $('result').classList.remove('show');
@@ -1178,8 +1191,10 @@
 
   /* Fila: as consultas de mapa rodam uma de cada vez (os serviços limitam 1 consulta por segundo) */
   var geoQueue = Promise.resolve();
+  var geracao = 0; /* sobe a cada PDF novo: tarefas da fila que pertencem ao contrato anterior são descartadas */
   function enqueue(fn) {
-    geoQueue = geoQueue.then(fn).catch(function (e) { console.error(e); });
+    var g = geracao;
+    geoQueue = geoQueue.then(function () { return g === geracao ? fn() : null; }).catch(function (e) { console.error(e); });
     return geoQueue;
   }
 
@@ -1273,6 +1288,8 @@
       ta === false ? 'O e-mail da assinatura não parece ser do cliente' : 'E-mail diferente do e-mail do cadastro');
     var cl = geoRes.lojaCidade, cr = geoRes.cidadeRes;
     var outraCidade = !!cl && !!cr && norm(cl) !== norm(cr);
+    var docAnt = $('fAntigoDoc');
+    setAlerta(docAnt, docAnt.value.replace(/\D/g, '').length > 11, 'O antigo proprietário é pessoa jurídica (CNPJ)');
     setAlerta(fields.cidade, outraCidade, 'O cliente mora em outra cidade que a loja (' + cl + ')');
   }
 
@@ -1382,7 +1399,7 @@
 
   /* ---------- eventos ---------- */
   var drop = $('drop');
-  $('file').addEventListener('change', function (e) { handleFile(e.target.files[0]); });
+  $('file').addEventListener('change', function (e) { var f = e.target.files[0]; e.target.value = ''; handleFile(f); });
   ['dragenter', 'dragover'].forEach(function (ev) {
     drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
   });
@@ -1411,6 +1428,18 @@
   $('googleBtn').addEventListener('click', pesquisarGoogle);
   ['email', 'emailAssin', 'cidade'].forEach(function (k) { fields[k].addEventListener('input', atualizarAlertas); });
   fields.parecer.addEventListener('input', atualizarParecer);
+  /* CPF/CNPJ do antigo proprietário: máscara automática e alerta quando é CNPJ */
+  $('fAntigoDoc').addEventListener('input', function () {
+    var d = this.value.replace(/\D/g, '').slice(0, 14), o;
+    if (d.length <= 11) {
+      o = d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2');
+    } else {
+      o = d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+    }
+    this.value = o;
+    atualizarAlertas();
+  });
+  $('fAntigoNome').addEventListener('input', function () { /* sem regra: só entra no e-mail */ });
 
   /* ---------- E-mail De Acordo ---------- */
   function esc(s) {
@@ -1461,6 +1490,9 @@
     [['Aprovação automática', 'fAprov'], ['Veículo compatível com a loja', 'fVeicLoja'], ['Loja de recorrência', 'fRecorr']].forEach(function (c) {
       linhas.push([c[0], $(c[1]).value || 'Não informado']);
     });
+    linhas.push(['Antigo proprietário', $('fAntigoNome').value.trim() || 'Não informado']);
+    linhas.push(['CPF/CNPJ do antigo proprietário', $('fAntigoDoc').value.trim() || 'Não informado',
+      temAlerta($('fAntigoDoc')) ? { cor: COR_ALERTA, icone: true } : null]);
     if (riscoPontos > 0 && fields.parecer.value.trim()) linhas.unshift(['Parecer do GCM', fields.parecer.value.trim()]);
     var td = 'border:1px solid #cde3d3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:14px;';
     var tit = 'Dados da proposta' + (fields.proposta.value ? ' ' + esc(fields.proposta.value) : '');
@@ -1533,7 +1565,8 @@
     $('lrResult').classList.remove('show');
     $('riskResult').classList.remove('show');
     fields.parecer.value = ''; riscoPontos = 0; atualizarParecer();
-    ['fAprov', 'fVeicLoja', 'fRecorr'].forEach(function (id) { $(id).value = ''; });
+    ['fAprov', 'fVeicLoja', 'fRecorr', 'fAntigoNome', 'fAntigoDoc'].forEach(function (id) { $(id).value = ''; });
+    atualizarAlertas();
     setRiskStatus('');
     setLrStatus('');
     setStatus('');
