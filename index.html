@@ -94,13 +94,15 @@
     border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; width: 100%;
   }
   .field textarea:focus-visible { outline: 2px solid var(--verde-escuro); outline-offset: 1px; border-color: var(--verde-escuro); }
-  .field textarea.missing { border-color: var(--warn); }
+  .field textarea.missing, .field select.missing { border-color: var(--warn); }
+  .detalhes-ant { grid-column: 1 / -1; }
+  .detalhes-ant[hidden] { display: none; }
   .entry[hidden] { display: none; }
   #mailBtn:disabled { cursor: not-allowed; }
   .field input[readonly] { background: #f6fbf8; }
   .field.alerta label { color: #9a3412; }
   .field.alerta label::before { content: "\26A0\00a0"; }
-  .field.alerta input { background: #fff4e5; border-color: #d97706; color: #7c2d12; }
+  .field.alerta input, .field.alerta select { background: #fff4e5; border-color: #d97706; color: #7c2d12; }
   .hint { font-size: .72rem; color: var(--muted); }
   .hint.warn { color: var(--warn); }
 
@@ -369,9 +371,14 @@
             <input id="fAntigoDoc" type="text" inputmode="numeric" autocomplete="off" placeholder="CPF ou CNPJ">
           </div>
         </div>
+        <div class="field detalhes-ant" id="detAntBox" hidden>
+          <label for="fDetAnt">Detalhes do proprietário anterior (obrigatório)</label>
+          <textarea id="fDetAnt" rows="3" autocomplete="off" placeholder="Informe o que foi verificado sobre o proprietário anterior (empresa, relação com a loja, etc.)"></textarea>
+        </div>
       </div>
     </div>
 
+    <p class="hint warn" id="hObrig"></p>
     <div class="actions">
       <button type="button" id="mailBtn">E-mail De Acordo</button>
       <button type="button" class="ghost" id="reset">Ler outro PDF</button>
@@ -716,7 +723,7 @@
     $('riskResult').classList.remove('show');
     setLrStatus(''); setGeoStatus('');
     fields.parecer.value = ''; riscoPontos = 0; atualizarParecer();
-    ['fAprov', 'fVeicLoja', 'fRecorr', 'fRenave', 'fAntigoNome', 'fAntigoDoc'].forEach(function (id) { $(id).value = ''; });
+    ['fAprov', 'fVeicLoja', 'fRecorr', 'fRenave', 'fAntigoNome', 'fAntigoDoc', 'fDetAnt'].forEach(function (id) { $(id).value = ''; });
     aplicarRenave();
     setRiskStatus('');
     setStatus('Lendo o PDF…');
@@ -1239,11 +1246,28 @@
   function atualizarParecer() {
     var precisa = riscoPontos > 0;
     $('parecerBox').hidden = !precisa;
-    var falta = precisa && !fields.parecer.value.trim();
-    $('mailBtn').disabled = falta;
-    $('mailBtn').title = falta ? 'Preencha o parecer do GCM para liberar o e-mail' : '';
-    $('hParecer').textContent = falta ? 'Preenchimento obrigatório: o botão E-mail De Acordo fica bloqueado até preencher.' : '';
-    fields.parecer.classList.toggle('missing', falta);
+    var lido = $('result').classList.contains('show');
+    var pend = [];
+    var vazio = function (el) { return !String(el.value).trim(); };
+    var marca = function (el, falta, nome) {
+      el.classList.toggle('missing', !!falta);
+      if (falta) pend.push({ el: el, nome: nome });
+    };
+    marca(fields.parecer, precisa && vazio(fields.parecer), 'parecer do GCM');
+    var renave = $('fRenave').value;
+    marca($('fRenave'), lido && !renave, 'Renave');
+    marca($('fAntigoNome'), lido && renave === 'Não' && vazio($('fAntigoNome')), 'nome do antigo proprietário');
+    marca($('fAntigoDoc'), lido && renave === 'Não' && vazio($('fAntigoDoc')), 'CPF/CNPJ do antigo proprietário');
+    /* alerta de CNPJ abre a caixa "Detalhes do proprietário anterior", também obrigatória */
+    var comAlerta = $('fAntigoDoc').closest('.field').classList.contains('alerta');
+    $('detAntBox').hidden = !comAlerta;
+    marca($('fDetAnt'), comAlerta && vazio($('fDetAnt')), 'detalhes do proprietário anterior');
+    var lista = pend.map(function (x) { return x.nome; }).join(', ');
+    $('mailBtn').disabled = pend.length > 0;
+    $('mailBtn').title = pend.length ? 'Preencha: ' + lista : '';
+    $('hObrig').textContent = pend.length ? 'Para liberar o botão E-mail De Acordo, preencha: ' + lista + '.' : '';
+    $('hParecer').textContent = precisa && vazio(fields.parecer) ? 'Preenchimento obrigatório: o botão E-mail De Acordo fica bloqueado até preencher.' : '';
+    return pend;
   }
   function setRiskStatus(msg, isError) {
     var g = $('riskStatus');
@@ -1298,9 +1322,11 @@
       ta === false ? 'O e-mail da assinatura não parece ser do cliente' : 'E-mail diferente do e-mail do cadastro');
     var cl = geoRes.lojaCidade, cr = geoRes.cidadeRes;
     var outraCidade = !!cl && !!cr && norm(cl) !== norm(cr);
+    setAlerta($('fAprov'), $('fAprov').value === 'Sim', 'Aprovação automática: confira a operação com atenção');
     var docAnt = $('fAntigoDoc');
     setAlerta(docAnt, $('fRenave').value !== 'Sim' && docAnt.value.replace(/\D/g, '').length > 11, 'O antigo proprietário é pessoa jurídica (CNPJ)');
     setAlerta(fields.cidade, outraCidade, 'O cliente mora em outra cidade que a loja (' + cl + ')');
+    atualizarParecer();
   }
 
   /* Pontuação por regras, sem IA. Pesos, do maior para o menor:
@@ -1457,6 +1483,8 @@
     atualizarAlertas();
   }
   $('fRenave').addEventListener('change', aplicarRenave);
+  $('fAprov').addEventListener('change', atualizarAlertas);
+  ['fAntigoNome', 'fDetAnt'].forEach(function (id) { $(id).addEventListener('input', atualizarParecer); });
 
   /* ---------- E-mail De Acordo ---------- */
   function esc(s) {
@@ -1505,13 +1533,16 @@
         fr ? { cor: corEmail(fr) } : null]);
     }
     [['Aprovação automática', 'fAprov'], ['Veículo compatível com a loja', 'fVeicLoja'], ['Loja de recorrência', 'fRecorr']].forEach(function (c) {
-      linhas.push([c[0], $(c[1]).value || 'Não informado']);
+      linhas.push([c[0], $(c[1]).value || 'Não informado', temAlerta($(c[1])) ? { cor: COR_ALERTA, icone: true } : null]);
     });
     linhas.push(['Renave', $('fRenave').value || 'Não informado']);
     if ($('fRenave').value !== 'Sim') {
       linhas.push(['Antigo proprietário', $('fAntigoNome').value.trim() || 'Não informado']);
       linhas.push(['CPF/CNPJ do antigo proprietário', $('fAntigoDoc').value.trim() || 'Não informado',
         temAlerta($('fAntigoDoc')) ? { cor: COR_ALERTA, icone: true } : null]);
+      if (!$('detAntBox').hidden) {
+        linhas.push(['Detalhes do proprietário anterior', $('fDetAnt').value.trim() || 'Não informado', { cor: COR_ALERTA, icone: true }]);
+      }
     }
     if (riscoPontos > 0 && fields.parecer.value.trim()) linhas.unshift(['Parecer do GCM', fields.parecer.value.trim()]);
     var td = 'border:1px solid #cde3d3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:14px;';
@@ -1557,10 +1588,10 @@
   }
   $('mailBtn').addEventListener('click', function () {
     if (fields.nome.value.trim()) riscoPontos = sinaisLocais().pontos;
-    atualizarParecer();
-    if (riscoPontos > 0 && !fields.parecer.value.trim()) {
-      setStatus('Preencha o parecer do GCM antes de enviar o e-mail De Acordo.', true);
-      fields.parecer.focus();
+    var pend = atualizarParecer();
+    if (pend.length) {
+      setStatus('Preencha antes de enviar o e-mail De Acordo: ' + pend.map(function (x) { return x.nome; }).join(', ') + '.', true);
+      pend[0].el.focus();
       return;
     }
     var prop = fields.proposta.value.trim();
@@ -1585,7 +1616,7 @@
     $('lrResult').classList.remove('show');
     $('riskResult').classList.remove('show');
     fields.parecer.value = ''; riscoPontos = 0; atualizarParecer();
-    ['fAprov', 'fVeicLoja', 'fRecorr', 'fRenave', 'fAntigoNome', 'fAntigoDoc'].forEach(function (id) { $(id).value = ''; });
+    ['fAprov', 'fVeicLoja', 'fRecorr', 'fRenave', 'fAntigoNome', 'fAntigoDoc', 'fDetAnt'].forEach(function (id) { $(id).value = ''; });
     aplicarRenave();
     setRiskStatus('');
     setLrStatus('');
